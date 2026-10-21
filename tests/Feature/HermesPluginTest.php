@@ -96,3 +96,11 @@ test('hermes bridge builds valid command array avoiding batch file ampersand pit
         ->and($cmd)->toContain('Review R&D & Deep Learning');
 });
 
+test('hermes bridge provides essential home environment variables', function () {
+    $bridge = new \App\Services\Ai\HermesBridge();
+    $env = $bridge->resolveEnvironment();
+
+    expect($env)->toHaveKeys(['USERPROFILE', 'HOME', 'HERMES_HOME']);
+});
+
+
