@@ -25,7 +25,7 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['saved', 'status-change']);
+const emit = defineEmits(['saved', 'status-change', 'check-evidence']);
 
 // Editor state
 const editor = ref(null);
@@ -255,10 +255,29 @@ onBeforeUnmount(() => {
     }
 });
 
-// Expose flush method to parent component
+// Expose methods to parent component
+const getSelectedText = () => {
+    if (!editor.value) return '';
+    const { from, to } = editor.value.state.selection;
+    if (from === to) return '';
+    return editor.value.state.doc.textBetween(from, to, ' ');
+};
+
+const replaceSelection = (newText) => {
+    if (!editor.value) return;
+    editor.value.chain().focus().insertContent(newText).run();
+};
+
+const triggerCheckEvidence = () => {
+    const text = getSelectedText();
+    emit('check-evidence', text);
+};
+
 defineExpose({
     flush,
     saveContent,
+    getSelectedText,
+    replaceSelection,
 });
 
 // Formatting commands
@@ -513,6 +532,17 @@ const redo = () => editor.value?.chain().focus().redo().run();
 
                 <!-- Right Toolbar Groups: Revision History, Theme Toggle, Word Count & Auto-save Status Indicator -->
                 <div class="flex items-center space-x-2">
+                    <!-- Citation Evidence Checker Button -->
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1 px-2 py-1 rounded border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 text-[11px] font-medium text-gray-700 hover:text-indigo-800 transition cursor-pointer"
+                        title="Verifikasi klaim ilmiah atau teks yang disorot terhadap literatur"
+                        @click="triggerCheckEvidence"
+                    >
+                        <span class="text-indigo-600 font-bold">✔</span>
+                        <span>Cek Bukti</span>
+                    </button>
+
                     <!-- Version History Button -->
                     <button
                         type="button"

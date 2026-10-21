@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ChapterController;
 use App\Http\Controllers\ChapterRevisionController;
+use App\Http\Controllers\EvidenceCheckerController;
 use App\Http\Controllers\HermesPluginController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
@@ -38,6 +39,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/projects/{project}/chapters/{chapter}/revisions/{revision}/restore', [ChapterRevisionController::class, 'restore'])->name('projects.chapters.revisions.restore')->scopeBindings();
 
     Route::post('/projects/{project}/hermes/chat', [HermesPluginController::class, 'chat'])->name('projects.hermes.chat');
+    Route::post('/projects/{project}/evidence/check', [EvidenceCheckerController::class, 'check'])->name('projects.evidence.check');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

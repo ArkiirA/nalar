@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ChapterEditor from '@/Components/ChapterEditor.vue';
 import HermesPlugin from '@/Components/HermesPlugin.vue';
+import EvidenceChecker from '@/Components/EvidenceChecker.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
@@ -36,6 +37,15 @@ const activeTab = ref('guidelines'); // 'guidelines' | 'library' | 'evidence' | 
 const selectedChapterId = ref(props.chapters.length > 0 ? props.chapters[0].id : null);
 const selectedSectionId = ref(null);
 const editorRef = ref(null);
+const evidenceCheckerRef = ref(null);
+
+const handleCheckEvidence = (text) => {
+    activeTab.value = 'evidence';
+    isToolsOpen.value = true;
+    if (text && evidenceCheckerRef.value?.setClaim) {
+        evidenceCheckerRef.value.setClaim(text);
+    }
+};
 
 const activeChapter = computed(() => {
     return props.chapters.find((c) => c.id === selectedChapterId.value) || null;
@@ -519,6 +529,7 @@ const activePresetInfo = computed(() => {
                         ref="editorRef"
                         :project="project"
                         :chapter="activeDocumentItem"
+                        @check-evidence="handleCheckEvidence"
                     />
                 </div>
 
@@ -596,7 +607,7 @@ const activePresetInfo = computed(() => {
             <!-- Right Column: Expandable Tools Drawer -->
             <aside
                 class="flex flex-col border-l border-gray-200 bg-white transition-all duration-200 ease-in-out shrink-0"
-                :class="isToolsOpen ? (activeTab === 'hermes' ? 'w-96' : 'w-80') : 'w-12 items-center'"
+                :class="isToolsOpen ? (activeTab === 'hermes' || activeTab === 'evidence' ? 'w-96' : 'w-80') : 'w-12 items-center'"
             >
                 <!-- Drawer Header -->
                 <div class="flex items-center justify-between border-b border-gray-100 p-3">
@@ -620,7 +631,7 @@ const activePresetInfo = computed(() => {
                         <button
                             type="button"
                             class="rounded px-2 py-1 text-xs font-semibold transition"
-                            :class="activeTab === 'evidence' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-500 hover:text-gray-700'"
+                            :class="activeTab === 'evidence' ? 'bg-indigo-50 text-indigo-700 font-bold border border-indigo-200' : 'text-gray-500 hover:text-gray-700'"
                             @click="activeTab = 'evidence'"
                         >
                             Evidence
@@ -725,19 +736,13 @@ const activePresetInfo = computed(() => {
                     </div>
 
                     <!-- Tab: Evidence Checker -->
-                    <div v-else-if="activeTab === 'evidence'" class="space-y-4">
-                        <div class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500">
-                            <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3">
-                                &#10004;
-                            </div>
-                            <h4 class="font-semibold text-gray-900 mb-1">Citation Evidence Checker</h4>
-                            <p class="text-xs text-gray-500 mb-4">
-                                Sorot kalimat atau klaim argumen dalam editor untuk memverifikasi keabsahannya terhadap paper riset terunggah.
-                            </p>
-                            <span class="inline-block rounded-full bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
-                                Segera hadir
-                            </span>
-                        </div>
+                    <div v-else-if="activeTab === 'evidence'">
+                        <EvidenceChecker
+                            ref="evidenceCheckerRef"
+                            :project="project"
+                            :chapter="activeDocumentItem"
+                            :editor-ref="editorRef"
+                        />
                     </div>
 
                     <!-- Tab: Hermes Copilot Plugin -->

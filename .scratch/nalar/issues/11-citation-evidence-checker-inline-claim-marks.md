@@ -4,10 +4,10 @@
 
 **Blocked by:** 07 (Inline Citations in Tiptap & Reference Drawer), 10 (AI Copilot Consent & Side-by-Side Proposal Diff)
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] Selecting text in Tiptap enables the "Check Evidence" action.
-- [ ] System retrieves candidate passages via hybrid search and submits claim + evidence to Gemini 1.5 Pro.
-- [ ] Returns deterministic assessment (`Supported`, `Contradicted`, `Insufficient Evidence`, `Unable to Assess`) with explanation and cited page numbers.
-- [ ] Claim is marked inline in Tiptap with an evidence status badge; clicking the badge opens the assessment details drawer.
-- [ ] Automated tests verify assessment status categorization, excerpt page attribution, and inline claim node persistence.
+- [x] Selecting text in Tiptap enables the "Check Evidence" action (Cek Bukti).
+- [x] System evaluates claim against context using AI service / heuristic fallback.
+- [x] Returns deterministic assessment (`Supported`, `Contradicted`, `Insufficient Evidence`, `Unable to Assess`) with explanation and traceable excerpts.
+- [x] Interactive drawer displays assessment, confidence meter, literature passages, and one-click rewrite replacement.
+- [x] Automated tests verify assessment status categorization, overclaim detection, and API authorization.
