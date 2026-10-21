@@ -263,46 +263,49 @@ class GuidelinePresets
                 'id' => 'gunadarma',
                 'name' => 'Universitas Gunadarma',
                 'university' => 'Universitas Gunadarma',
-                'description' => 'Buku Pedoman Penulisan Skripsi dan Penulisan Ilmiah Universitas Gunadarma.',
+                'description' => 'Buku Pedoman Penulisan Skripsi dan Penulisan Ilmiah Universitas Gunadarma (laporan-generator-thesis).',
                 'citation_style' => 'APA 7th',
-                'formatting' => self::defaultFormatting(),
+                'formatting' => self::defaultFormatting([
+                    'heading_chapter_prefix' => '',
+                    'heading_chapter_num_format' => 'arabic',
+                ]),
                 'outline' => [
                     [
-                        'title' => 'BAB 1 PENDAHULUAN',
+                        'title' => '1. PENDAHULUAN',
                         'sections' => [
-                            '1.1 Latar Belakang Masalah',
-                            '1.2 Batasan Masalah',
-                            '1.3 Rumusan Masalah',
-                            '1.4 Tujuan Penulisan',
-                            '1.5 Metode Penelitian',
-                            '1.6 Sistematika Penulisan',
+                            '1.1 Latar Belakang',
+                            '1.2 Ruang Lingkup',
+                            '1.3 Tujuan Penelitian',
+                            '1.4 Manfaat Penelitian',
+                            '1.5 Sistematika Penulisan',
                         ],
                     ],
                     [
-                        'title' => 'BAB 2 TINJAUAN PUSTAKA',
+                        'title' => '2. LANDASAN TEORI',
                         'sections' => [
                             '2.1 Landasan Teori',
                             '2.2 Tinjauan Penelitian Terdahulu',
                         ],
                     ],
                     [
-                        'title' => 'BAB 3 METODE PENELITIAN',
+                        'title' => '3. METODOLOGI PENELITIAN',
                         'sections' => [
-                            '3.1 Analisis Kebutuhan',
-                            '3.2 Desain dan Perancangan Sistem',
-                            '3.3 Tahapan Pengembangan',
+                            '3.1 Kerangka Penelitian',
+                            '3.2 Analisis Kebutuhan',
+                            '3.3 Desain dan Perancangan Sistem',
+                            '3.4 Rencana Pengujian',
                         ],
                     ],
                     [
-                        'title' => 'BAB 4 HASIL DAN PEMBAHASAN',
+                        'title' => '4. HASIL DAN PEMBAHASAN',
                         'sections' => [
-                            '4.1 Implementasi dan Antarmuka Sistem',
-                            '4.2 Uji Coba dan Evaluasi',
+                            '4.1 Implementasi Sistem',
+                            '4.2 Pengujian dan Evaluasi',
                             '4.3 Pembahasan Temuan',
                         ],
                     ],
                     [
-                        'title' => 'BAB 5 PENUTUP',
+                        'title' => '5. PENUTUP',
                         'sections' => [
                             '5.1 Kesimpulan',
                             '5.2 Saran',
