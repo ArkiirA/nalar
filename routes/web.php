@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ChapterController;
 use App\Http\Controllers\ChapterRevisionController;
+use App\Http\Controllers\HermesPluginController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use Illuminate\Foundation\Application;
@@ -35,6 +36,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/projects/{project}/chapters/{chapter}/revisions/auto', [ChapterRevisionController::class, 'storeAuto'])->name('projects.chapters.revisions.auto')->scopeBindings();
     Route::post('/projects/{project}/chapters/{chapter}/revisions/checkpoint', [ChapterRevisionController::class, 'storeCheckpoint'])->name('projects.chapters.revisions.checkpoint')->scopeBindings();
     Route::post('/projects/{project}/chapters/{chapter}/revisions/{revision}/restore', [ChapterRevisionController::class, 'restore'])->name('projects.chapters.revisions.restore')->scopeBindings();
+
+    Route::post('/projects/{project}/hermes/chat', [HermesPluginController::class, 'chat'])->name('projects.hermes.chat');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

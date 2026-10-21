@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ChapterEditor from '@/Components/ChapterEditor.vue';
+import HermesPlugin from '@/Components/HermesPlugin.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
@@ -29,7 +30,7 @@ const props = defineProps({
 // Layout state
 const isOutlineOpen = ref(true);
 const isToolsOpen = ref(true);
-const activeTab = ref('guidelines'); // 'guidelines' | 'library' | 'evidence'
+const activeTab = ref('guidelines'); // 'guidelines' | 'library' | 'evidence' | 'hermes'
 
 // Active chapter & section selection
 const selectedChapterId = ref(props.chapters.length > 0 ? props.chapters[0].id : null);
@@ -595,7 +596,7 @@ const activePresetInfo = computed(() => {
             <!-- Right Column: Expandable Tools Drawer -->
             <aside
                 class="flex flex-col border-l border-gray-200 bg-white transition-all duration-200 ease-in-out shrink-0"
-                :class="isToolsOpen ? 'w-80' : 'w-12 items-center'"
+                :class="isToolsOpen ? (activeTab === 'hermes' ? 'w-96' : 'w-80') : 'w-12 items-center'"
             >
                 <!-- Drawer Header -->
                 <div class="flex items-center justify-between border-b border-gray-100 p-3">
@@ -623,6 +624,14 @@ const activePresetInfo = computed(() => {
                             @click="activeTab = 'evidence'"
                         >
                             Evidence
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded px-2 py-1 text-xs font-semibold transition"
+                            :class="activeTab === 'hermes' ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200' : 'text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50/50'"
+                            @click="activeTab = 'hermes'"
+                        >
+                            Hermes AI
                         </button>
                     </div>
 
@@ -729,6 +738,14 @@ const activePresetInfo = computed(() => {
                                 Segera hadir
                             </span>
                         </div>
+                    </div>
+
+                    <!-- Tab: Hermes Copilot Plugin -->
+                    <div v-else-if="activeTab === 'hermes'" class="h-full">
+                        <HermesPlugin
+                            :project="project"
+                            :chapter="activeDocumentItem"
+                        />
                     </div>
                 </div>
 
