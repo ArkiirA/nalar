@@ -126,5 +126,5 @@ test('user can retry extraction and delete document', function () {
     $deleteResponse->assertOk();
 
     $this->assertDatabaseMissing('documents', ['id' => $document->id]);
-    Storage::disk('local')->assertMissing($filePath);
+    expect(Storage::disk('local')->exists($filePath))->toBeFalse();
 });
