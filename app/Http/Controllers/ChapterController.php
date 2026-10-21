@@ -56,6 +56,10 @@ class ChapterController extends Controller
 
         $chapter->update($validated);
 
+        if (array_key_exists('content', $validated) && $validated['content'] !== null) {
+            $chapter->maybeRecordAutoSnapshot($validated['content']);
+        }
+
         if ($request->wantsJson()) {
             return response()->json([
                 'message' => 'Chapter saved successfully.',

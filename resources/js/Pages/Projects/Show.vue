@@ -9,7 +9,8 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import axios from 'axios';
 
 const props = defineProps({
     project: {
@@ -228,6 +229,183 @@ const activePresetInfo = computed(() => {
     if (!props.project.guideline_preset) return null;
     return props.guidelinePresets[props.project.guideline_preset] || null;
 });
+
+// Revisions & Snapshots state
+const revisions = ref([]);
+const isLoadingRevisions = ref(false);
+const isSaveVersionModalOpen = ref(false);
+const saveVersionTitle = ref('');
+const saveVersionError = ref('');
+const isSavingVersion = ref(false);
+const previewRevision = ref(null);
+const isRestoring = ref(false);
+
+const fetchRevisions = async (targetId = activeDocumentItem.value?.id) => {
+    if (!targetId) {
+        revisions.value = [];
+        return;
+    }
+    isLoadingRevisions.value = true;
+    try {
+        const response = await axios.get(route('projects.chapters.revisions.index', [props.project.id, targetId]));
+        revisions.value = response.data.revisions || [];
+    } catch (err) {
+        console.error('Failed to fetch revisions:', err);
+    } finally {
+        isLoadingRevisions.value = false;
+    }
+};
+
+const openRevisionsDrawer = () => {
+    isToolsOpen.value = true;
+    activeTab.value = 'revisions';
+    fetchRevisions();
+};
+
+const openSaveVersionModal = () => {
+    saveVersionTitle.value = '';
+    saveVersionError.value = '';
+    isSaveVersionModalOpen.value = true;
+};
+
+const closeSaveVersionModal = () => {
+    isSaveVersionModalOpen.value = false;
+    saveVersionTitle.value = '';
+    saveVersionError.value = '';
+};
+
+const submitSaveVersion = async () => {
+    if (!saveVersionTitle.value.trim()) {
+        saveVersionError.value = 'Judul snapshot checkpoint wajib diisi.';
+        return;
+    }
+
+    if (!activeDocumentItem.value) return;
+
+    isSavingVersion.value = true;
+    saveVersionError.value = '';
+
+    try {
+        await flushEditor();
+        await axios.post(
+            route('projects.chapters.revisions.store', [props.project.id, activeDocumentItem.value.id]),
+            { title: saveVersionTitle.value.trim() },
+            { headers: { Accept: 'application/json' } }
+        );
+        closeSaveVersionModal();
+        await fetchRevisions();
+        isToolsOpen.value = true;
+        activeTab.value = 'revisions';
+    } catch (err) {
+        saveVersionError.value = err.response?.data?.message || 'Gagal menyimpan snapshot versi.';
+    } finally {
+        isSavingVersion.value = false;
+    }
+};
+
+const selectPreviewRevision = async (rev) => {
+    if (!activeDocumentItem.value) return;
+    try {
+        const response = await axios.get(
+            route('projects.chapters.revisions.show', [props.project.id, activeDocumentItem.value.id, rev.id])
+        );
+        previewRevision.value = response.data.revision;
+    } catch (err) {
+        console.error('Failed to load revision details:', err);
+    }
+};
+
+const closePreview = () => {
+    previewRevision.value = null;
+};
+
+const restoreRevision = async (rev) => {
+    if (!rev || !activeDocumentItem.value) return;
+
+    if (!confirm(`Restore this version ("${rev.title}")? Konten dokumen akan digantikan dengan snapshot ini.`)) {
+        return;
+    }
+
+    isRestoring.value = true;
+    try {
+        const response = await axios.post(
+            route('projects.chapters.revisions.restore', [props.project.id, activeDocumentItem.value.id, rev.id]),
+            {},
+            { headers: { Accept: 'application/json' } }
+        );
+
+        if (editorRef.value?.setContent) {
+            editorRef.value.setContent(response.data.chapter.content);
+        }
+        activeDocumentItem.value.content = response.data.chapter.content;
+        closePreview();
+        await fetchRevisions();
+    } catch (err) {
+        console.error('Failed to restore revision:', err);
+        alert('Gagal memulihkan versi: ' + (err.response?.data?.message || err.message));
+    } finally {
+        isRestoring.value = false;
+    }
+};
+
+const getPreviewBlocks = (doc) => {
+    if (!doc || !doc.content || !Array.isArray(doc.content)) {
+        return [{ type: 'paragraph', text: 'Tidak ada konten teks tersimpan.' }];
+    }
+
+    const extractText = (node) => {
+        if (!node) return '';
+        if (node.text) return node.text;
+        if (node.content && Array.isArray(node.content)) {
+            return node.content.map(extractText).join('');
+        }
+        return '';
+    };
+
+    const blocks = [];
+    for (const node of doc.content) {
+        if (node.type === 'heading') {
+            const txt = extractText(node).trim();
+            if (txt) blocks.push({ type: 'heading', level: node.attrs?.level || 1, text: txt });
+        } else if (node.type === 'paragraph') {
+            const txt = extractText(node).trim();
+            if (txt) blocks.push({ type: 'paragraph', text: txt });
+        } else if (node.type === 'bulletList' || node.type === 'orderedList') {
+            const items = (node.content || []).map((li) => extractText(li).trim()).filter(Boolean);
+            if (items.length > 0) blocks.push({ type: node.type, items });
+        } else if (node.type === 'table') {
+            const rowCount = (node.content || []).length;
+            blocks.push({ type: 'table', summary: `Tabel Ilmiah (${rowCount} baris)` });
+        } else if (node.type === 'figureCaption') {
+            const txt = extractText(node).trim();
+            if (txt) blocks.push({ type: 'caption', text: txt });
+        } else {
+            const txt = extractText(node).trim();
+            if (txt) blocks.push({ type: 'paragraph', text: txt });
+        }
+    }
+
+    return blocks.length > 0 ? blocks : [{ type: 'paragraph', text: 'Dokumen kosong.' }];
+};
+
+// Auto-fetch revisions when switching to revisions tab
+watch(activeTab, (newTab) => {
+    if (newTab === 'revisions') {
+        fetchRevisions();
+    }
+});
+
+watch(
+    () => activeDocumentItem.value?.id,
+    (newId, oldId) => {
+        if (newId !== oldId) {
+            previewRevision.value = null;
+            if (activeTab.value === 'revisions') {
+                fetchRevisions(newId);
+            }
+        }
+    }
+);
 </script>
 
 <template>
@@ -518,6 +696,8 @@ const activePresetInfo = computed(() => {
                         ref="editorRef"
                         :project="project"
                         :chapter="activeDocumentItem"
+                        @open-revisions="openRevisionsDrawer"
+                        @save-version="openSaveVersionModal"
                     />
                 </div>
 
@@ -624,6 +804,14 @@ const activePresetInfo = computed(() => {
                         >
                             Evidence
                         </button>
+                        <button
+                            type="button"
+                            class="rounded px-2 py-1 text-xs font-semibold transition"
+                            :class="activeTab === 'revisions' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-500 hover:text-gray-700'"
+                            @click="openRevisionsDrawer"
+                        >
+                            Revisi
+                        </button>
                     </div>
 
                     <button
@@ -728,6 +916,180 @@ const activePresetInfo = computed(() => {
                             <span class="inline-block rounded-full bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
                                 Segera hadir
                             </span>
+                        </div>
+                    </div>
+
+                    <!-- Tab: Chapter Revisions Drawer -->
+                    <div v-else-if="activeTab === 'revisions'" class="space-y-4">
+                        <!-- Drawer Header & Action -->
+                        <div class="flex items-center justify-between pb-2 border-b border-gray-100">
+                            <div class="truncate mr-2">
+                                <span class="block text-[11px] font-bold uppercase tracking-wider text-gray-400">Riwayat Snapshot</span>
+                                <span class="text-xs font-semibold text-gray-800 truncate block">{{ activeDocumentItem?.title || 'Pilih Bab' }}</span>
+                            </div>
+                            <button
+                                type="button"
+                                class="inline-flex items-center rounded bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 shrink-0"
+                                @click="openSaveVersionModal"
+                            >
+                                + Save Version
+                            </button>
+                        </div>
+
+                        <!-- Preview Container when a revision is selected -->
+                        <div v-if="previewRevision" class="rounded-lg border-2 border-indigo-200 bg-indigo-50/40 p-3 space-y-3">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <div class="flex items-center space-x-1.5 mb-1">
+                                        <span
+                                            class="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded"
+                                            :class="previewRevision.is_manual ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-200 text-gray-700'"
+                                        >
+                                            {{ previewRevision.is_manual ? 'Manual' : 'Otomatis' }}
+                                        </span>
+                                        <span class="text-xs font-bold text-gray-900">{{ previewRevision.title }}</span>
+                                    </div>
+                                    <div class="text-[11px] text-gray-500">
+                                        {{ previewRevision.relative_time }} &bull; {{ new Date(previewRevision.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="text-gray-400 hover:text-gray-600 text-sm font-bold p-1"
+                                    title="Tutup Pratinjau"
+                                    @click="closePreview"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+
+                            <!-- Structured Snapshot Preview -->
+                            <div class="max-h-60 overflow-y-auto bg-white rounded border border-gray-200 p-2.5 text-xs text-gray-700 space-y-2 font-serif">
+                                <div
+                                    v-for="(block, bIdx) in getPreviewBlocks(previewRevision.content)"
+                                    :key="bIdx"
+                                >
+                                    <h3 v-if="block.type === 'heading' && block.level === 1" class="font-bold font-sans text-sm text-gray-900 uppercase">
+                                        {{ block.text }}
+                                    </h3>
+                                    <h4 v-else-if="block.type === 'heading' && block.level === 2" class="font-bold font-sans text-xs text-gray-800">
+                                        {{ block.text }}
+                                    </h4>
+                                    <h5 v-else-if="block.type === 'heading'" class="font-semibold font-sans text-xs text-gray-700">
+                                        {{ block.text }}
+                                    </h5>
+                                    <ul v-else-if="block.type === 'bulletList'" class="list-disc list-inside space-y-0.5 text-xs">
+                                        <li v-for="(it, iIdx) in block.items" :key="iIdx">{{ it }}</li>
+                                    </ul>
+                                    <ol v-else-if="block.type === 'orderedList'" class="list-decimal list-inside space-y-0.5 text-xs">
+                                        <li v-for="(it, iIdx) in block.items" :key="iIdx">{{ it }}</li>
+                                    </ol>
+                                    <div v-else-if="block.type === 'table'" class="rounded bg-slate-50 border border-slate-200 p-1.5 text-center text-[11px] font-sans text-slate-600">
+                                        {{ block.summary }}
+                                    </div>
+                                    <div v-else-if="block.type === 'caption'" class="italic text-[11px] text-gray-500 font-sans">
+                                        {{ block.text }}
+                                    </div>
+                                    <p v-else class="leading-relaxed">
+                                        {{ block.text }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between pt-1">
+                                <button
+                                    type="button"
+                                    class="text-xs text-gray-500 hover:text-gray-700 font-medium"
+                                    @click="closePreview"
+                                >
+                                    Tutup Pratinjau
+                                </button>
+                                <PrimaryButton
+                                    type="button"
+                                    :disabled="isRestoring"
+                                    class="!px-3 !py-1 text-xs"
+                                    @click="restoreRevision(previewRevision)"
+                                >
+                                    {{ isRestoring ? 'Memulihkan...' : 'Restore this version' }}
+                                </PrimaryButton>
+                            </div>
+                        </div>
+
+                        <!-- Loading State -->
+                        <div v-if="isLoadingRevisions" class="py-8 text-center text-xs text-gray-500">
+                            <svg class="animate-spin h-5 w-5 text-indigo-600 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                            <span>Memuat riwayat revisi...</span>
+                        </div>
+
+                        <!-- Empty Revisions State -->
+                        <div
+                            v-else-if="!isLoadingRevisions && revisions.length === 0"
+                            class="rounded-lg border border-dashed border-gray-300 p-5 text-center text-xs text-gray-500"
+                        >
+                            <div class="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-2 font-bold">
+                                &#9201;
+                            </div>
+                            <h4 class="font-semibold text-gray-800 mb-1">Belum Ada Snapshot</h4>
+                            <p class="text-[11px] text-gray-500 mb-3">
+                                Snapshot otomatis dicatat setiap 5 menit selama pengetikan aktif (maks. 50 versi), atau simpan checkpoint versi manual sekarang.
+                            </p>
+                            <button
+                                type="button"
+                                class="inline-flex items-center rounded bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                                @click="openSaveVersionModal"
+                            >
+                                Simpan Versi Manual
+                            </button>
+                        </div>
+
+                        <!-- Chronological Snapshots List -->
+                        <div v-else class="space-y-2">
+                            <div
+                                v-for="rev in revisions"
+                                :key="rev.id"
+                                class="rounded-lg border p-3 transition bg-white shadow-xs"
+                                :class="previewRevision?.id === rev.id ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-gray-200 hover:border-gray-300'"
+                            >
+                                <div class="flex items-start justify-between mb-1.5">
+                                    <div class="flex-1 mr-2 truncate">
+                                        <div class="flex items-center space-x-1 mb-0.5">
+                                            <span
+                                                class="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded inline-block"
+                                                :class="rev.is_manual ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'"
+                                            >
+                                                {{ rev.is_manual ? 'Manual' : 'Otomatis' }}
+                                            </span>
+                                            <span class="text-xs font-bold text-gray-900 truncate block">
+                                                {{ rev.title }}
+                                            </span>
+                                        </div>
+                                        <div class="text-[11px] text-gray-500">
+                                            {{ rev.relative_time }} &bull; {{ new Date(rev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center justify-end space-x-2 pt-2 border-t border-gray-100 text-xs">
+                                    <button
+                                        type="button"
+                                        class="text-indigo-600 hover:text-indigo-800 font-medium"
+                                        @click="selectPreviewRevision(rev)"
+                                    >
+                                        Pratinjau
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="font-semibold text-gray-700 hover:text-indigo-700"
+                                        :disabled="isRestoring"
+                                        @click="restoreRevision(rev)"
+                                    >
+                                        Restore this version
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -851,6 +1213,39 @@ const activePresetInfo = computed(() => {
                     <div class="mt-6 flex justify-end space-x-3">
                         <SecondaryButton @click="closeEditModal">Batal</SecondaryButton>
                         <PrimaryButton :disabled="editForm.processing">Simpan Perubahan</PrimaryButton>
+                    </div>
+                </form>
+            </div>
+        </Modal>
+
+        <!-- Modal: Save Named Version Checkpoint -->
+        <Modal :show="isSaveVersionModalOpen" @close="closeSaveVersionModal">
+            <div class="p-6">
+                <h2 class="text-lg font-bold text-gray-900 mb-1">Save Version Checkpoint</h2>
+                <p class="text-xs text-gray-600 mb-4">
+                    Buat snapshot manual untuk "{{ activeDocumentItem?.title }}". Anda dapat melihat kembali atau memulihkan ke versi ini kapan saja.
+                </p>
+
+                <form @submit.prevent="submitSaveVersion">
+                    <div>
+                        <InputLabel for="version_title" value="Nama Checkpoint / Versi" />
+                        <TextInput
+                            id="version_title"
+                            v-model="saveVersionTitle"
+                            type="text"
+                            placeholder="Contoh: Draf sebelum bimbingan Bab 1"
+                            class="mt-1 block w-full text-sm"
+                            required
+                            autofocus
+                        />
+                        <InputError class="mt-2" :message="saveVersionError" />
+                    </div>
+
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <SecondaryButton @click="closeSaveVersionModal">Batal</SecondaryButton>
+                        <PrimaryButton :disabled="isSavingVersion">
+                            {{ isSavingVersion ? 'Menyimpan...' : 'Save Version' }}
+                        </PrimaryButton>
                     </div>
                 </form>
             </div>

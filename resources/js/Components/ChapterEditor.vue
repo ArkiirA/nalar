@@ -24,7 +24,7 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['saved', 'status-change']);
+const emit = defineEmits(['saved', 'status-change', 'open-revisions', 'save-version']);
 
 // Editor state
 const editor = ref(null);
@@ -34,6 +34,13 @@ const lastSavedTime = ref(null);
 const saveTimer = ref(null);
 const paperTheme = ref('white'); // 'white' | 'sepia'
 const isTableDropdownOpen = ref(false);
+
+const clearSaveTimers = () => {
+    if (saveTimer.value) {
+        clearTimeout(saveTimer.value);
+        saveTimer.value = null;
+    }
+};
 
 const isSaving = computed(() => saveStatus.value === 'saving');
 const isSaved = computed(() => saveStatus.value === 'saved');
@@ -79,10 +86,7 @@ const getInitialContent = (targetChapter) => {
 const saveContent = async (targetId = currentChapterId.value) => {
     if (!editor.value || !targetId || !props.project?.id) return;
 
-    if (saveTimer.value) {
-        clearTimeout(saveTimer.value);
-        saveTimer.value = null;
-    }
+    clearSaveTimers();
 
     const jsonContent = editor.value.getJSON();
     saveStatus.value = 'saving';
@@ -136,10 +140,7 @@ const queueAutoSave = () => {
 
 // Flush pending edits immediately (synchronous trigger for async save)
 const flush = async () => {
-    if (saveTimer.value) {
-        clearTimeout(saveTimer.value);
-        saveTimer.value = null;
-    }
+    clearSaveTimers();
 
     if (saveStatus.value === 'unsaved' && editor.value && currentChapterId.value) {
         return await saveContent(currentChapterId.value);
@@ -213,10 +214,28 @@ onBeforeUnmount(() => {
     }
 });
 
-// Expose flush method to parent component
+// Programmatically set editor content (e.g. on snapshot rollback)
+const setContent = (newContent) => {
+    clearSaveTimers();
+
+    if (editor.value) {
+        editor.value.commands.setContent(newContent, false);
+        saveStatus.value = 'saved';
+        emit('status-change', 'saved');
+        const now = new Date();
+        lastSavedTime.value = now.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        });
+    }
+};
+
+// Expose flush and setContent methods to parent component
 defineExpose({
     flush,
     saveContent,
+    setContent,
 });
 
 // Formatting commands
@@ -538,6 +557,26 @@ const redo = () => editor.value?.chain().focus().redo().run();
                                 Retry
                             </button>
                         </div>
+                    </div>
+
+                    <!-- Save Version & Revision Drawer Trigger -->
+                    <div class="flex items-center space-x-1 pl-2 border-l border-gray-200">
+                        <button
+                            type="button"
+                            title="Buat checkpoint versi manual"
+                            class="inline-flex items-center px-2 py-1 rounded text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition"
+                            @click="emit('save-version')"
+                        >
+                            <span class="mr-1">&#128190;</span> Save Version
+                        </button>
+                        <button
+                            type="button"
+                            title="Buka riwayat revisi dan snapshot"
+                            class="inline-flex items-center px-2 py-1 rounded text-[11px] font-medium text-gray-700 hover:bg-gray-100 border border-gray-200 transition"
+                            @click="emit('open-revisions')"
+                        >
+                            <span class="mr-1">&#9201;</span> Riwayat
+                        </button>
                     </div>
                 </div>
             </div>
