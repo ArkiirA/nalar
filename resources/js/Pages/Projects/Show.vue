@@ -29,6 +29,10 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    references: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 // Layout state
@@ -559,6 +563,200 @@ onUnmounted(() => {
         pollTimer = null;
     }
 });
+
+// Reference Management state & actions
+const librarySubTab = ref('documents'); // 'documents' | 'references'
+const selectedCitationStyle = ref(props.project.citation_style || 'apa');
+
+const updateCitationStyle = (style) => {
+    selectedCitationStyle.value = style;
+    router.patch(route('projects.citation-style', props.project.id), {
+        citation_style: style,
+    }, {
+        preserveScroll: true,
+    });
+};
+
+const isRefModalOpen = ref(false);
+const refModalMode = ref('manual'); // 'manual' | 'doi'
+const editingReferenceId = ref(null);
+const isResolvingDoi = ref(false);
+const doiInput = ref('');
+const doiError = ref('');
+const doiDuplicateNotice = ref(false);
+
+const refForm = useForm({
+    type: 'article-journal',
+    title: '',
+    authors_text: '',
+    year: '',
+    publication_title: '',
+    volume: '',
+    issue: '',
+    pages: '',
+    publisher: '',
+    publisher_place: '',
+    doi: '',
+    url: '',
+    document_id: null,
+});
+
+const openAddReferenceModal = (initialData = {}) => {
+    editingReferenceId.value = null;
+    refModalMode.value = initialData.doi ? 'doi' : 'manual';
+    doiInput.value = initialData.doi || '';
+    doiError.value = '';
+    doiDuplicateNotice.value = false;
+    refForm.reset();
+    refForm.clearErrors();
+
+    if (initialData.title) refForm.title = initialData.title;
+    if (initialData.document_id) refForm.document_id = initialData.document_id;
+    if (initialData.type) refForm.type = initialData.type;
+
+    isRefModalOpen.value = true;
+};
+
+const openEditReferenceModal = (refItem) => {
+    editingReferenceId.value = refItem.id;
+    refModalMode.value = 'manual';
+    doiError.value = '';
+    doiDuplicateNotice.value = false;
+    refForm.reset();
+    refForm.clearErrors();
+
+    refForm.type = refItem.type || 'article-journal';
+    refForm.title = refItem.title || '';
+    refForm.year = refItem.year || '';
+    refForm.publication_title = refItem.publication_title || '';
+    refForm.volume = refItem.volume || '';
+    refForm.issue = refItem.issue || '';
+    refForm.pages = refItem.pages || '';
+    refForm.publisher = refItem.publisher || '';
+    refForm.publisher_place = refItem.publisher_place || '';
+    refForm.doi = refItem.doi || '';
+    refForm.url = refItem.url || '';
+    refForm.document_id = refItem.document_id || null;
+
+    if (Array.isArray(refItem.authors)) {
+        refForm.authors_text = refItem.authors.map((a) => {
+            if (typeof a === 'string') return a;
+            return [a.given, a.family].filter(Boolean).join(' ');
+        }).join('; ');
+    } else {
+        refForm.authors_text = '';
+    }
+
+    isRefModalOpen.value = true;
+};
+
+const closeRefModal = () => {
+    isRefModalOpen.value = false;
+    editingReferenceId.value = null;
+    refForm.reset();
+    refForm.clearErrors();
+};
+
+const resolveDoiMetadata = async () => {
+    if (!doiInput.value.trim()) {
+        doiError.value = 'Silakan masukkan DOI.';
+        return;
+    }
+    isResolvingDoi.value = true;
+    doiError.value = '';
+    doiDuplicateNotice.value = false;
+
+    try {
+        const response = await axios.post(route('projects.references.resolve-doi', props.project.id), {
+            doi: doiInput.value.trim(),
+        });
+
+        if (response.data.success && response.data.metadata) {
+            const meta = response.data.metadata;
+            refForm.title = meta.title || '';
+            refForm.type = meta.type || 'article-journal';
+            refForm.year = meta.year || '';
+            refForm.publication_title = meta.publication_title || '';
+            refForm.volume = meta.volume || '';
+            refForm.issue = meta.issue || '';
+            refForm.pages = meta.pages || '';
+            refForm.publisher = meta.publisher || '';
+            refForm.doi = meta.doi || doiInput.value.trim();
+
+            if (Array.isArray(meta.authors)) {
+                refForm.authors_text = meta.authors.map((a) => {
+                    return [a.given, a.family].filter(Boolean).join(' ');
+                }).join('; ');
+            }
+
+            if (response.data.is_duplicate) {
+                doiDuplicateNotice.value = true;
+            }
+
+            refModalMode.value = 'manual';
+        }
+    } catch (err) {
+        doiError.value = err.response?.data?.error || 'Gagal memuat metadata DOI. Pastikan format DOI benar.';
+    } finally {
+        isResolvingDoi.value = false;
+    }
+};
+
+const formMissingWarnings = computed(() => {
+    const warnings = [];
+    if (!refForm.authors_text.trim()) warnings.push('Penulis');
+    if (!refForm.year) warnings.push('Tahun');
+
+    if (refForm.type === 'article-journal') {
+        if (!refForm.publication_title.trim()) warnings.push('Nama Jurnal');
+        if (!refForm.volume) warnings.push('Volume');
+        if (!refForm.pages) warnings.push('Halaman');
+    } else if (refForm.type === 'book') {
+        if (!refForm.publisher.trim()) warnings.push('Penerbit');
+    } else if (refForm.type === 'paper-conference') {
+        if (!refForm.publication_title.trim()) warnings.push('Nama Prosiding');
+    }
+
+    return warnings;
+});
+
+const submitReference = () => {
+    const payload = {
+        type: refForm.type,
+        title: refForm.title,
+        authors: refForm.authors_text,
+        year: refForm.year ? parseInt(refForm.year) : null,
+        publication_title: refForm.publication_title,
+        volume: refForm.volume,
+        issue: refForm.issue,
+        pages: refForm.pages,
+        publisher: refForm.publisher,
+        publisher_place: refForm.publisher_place,
+        doi: refForm.doi,
+        url: refForm.url,
+        document_id: refForm.document_id,
+    };
+
+    if (editingReferenceId.value) {
+        refForm.transform(() => payload).patch(route('projects.references.update', [props.project.id, editingReferenceId.value]), {
+            preserveScroll: true,
+            onSuccess: () => closeRefModal(),
+        });
+    } else {
+        refForm.transform(() => payload).post(route('projects.references.store', props.project.id), {
+            preserveScroll: true,
+            onSuccess: () => closeRefModal(),
+        });
+    }
+};
+
+const deleteReference = (refItem) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus referensi "${refItem.title}"?`)) {
+        router.delete(route('projects.references.destroy', [props.project.id, refItem.id]), {
+            preserveScroll: true,
+        });
+    }
+};
 </script>
 
 <template>
@@ -1042,13 +1240,29 @@ onUnmounted(() => {
 
                     <!-- Tab: Research Library -->
                     <div v-else-if="activeTab === 'library'" class="space-y-4">
-                        <!-- Header with counts and upload button -->
+                        <!-- Sub-tab switcher: Documents vs References -->
                         <div class="flex items-center justify-between pb-2 border-b border-gray-100">
-                            <div>
-                                <span class="block text-[11px] font-bold uppercase tracking-wider text-gray-400">Research Library</span>
-                                <span class="text-xs text-gray-500">{{ documents.length }} Dokumen Riset</span>
+                            <div class="flex items-center gap-1 rounded-lg bg-gray-100 p-0.5 text-xs font-semibold">
+                                <button
+                                    type="button"
+                                    class="rounded-md px-2.5 py-1 transition"
+                                    :class="librarySubTab === 'documents' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'"
+                                    @click="librarySubTab = 'documents'"
+                                >
+                                    Dokumen PDF ({{ documents.length }})
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md px-2.5 py-1 transition"
+                                    :class="librarySubTab === 'references' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'"
+                                    @click="librarySubTab = 'references'"
+                                >
+                                    Referensi ({{ references.length }})
+                                </button>
                             </div>
+
                             <button
+                                v-if="librarySubTab === 'documents'"
                                 type="button"
                                 class="inline-flex items-center gap-1 rounded bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700 shadow-sm transition"
                                 @click="openUploadModal"
@@ -1058,121 +1272,242 @@ onUnmounted(() => {
                                 </svg>
                                 Unggah PDF
                             </button>
-                        </div>
-
-                        <!-- Empty State -->
-                        <div v-if="documents.length === 0" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500 bg-slate-50/50">
-                            <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3 text-lg">
-                                &#128218;
-                            </div>
-                            <h4 class="font-semibold text-gray-900 mb-1">Research Library Kosong</h4>
-                            <p class="text-xs text-gray-500 mb-4 max-w-xs mx-auto">
-                                Unggah dokumen PDF jurnal ilmiah untuk membangun basis referensi terisolasi proyek Anda. Maksimal 25MB per file PDF.
-                            </p>
-                            <SecondaryButton class="text-xs" @click="openUploadModal">
-                                Unggah PDF Dokumen
-                            </SecondaryButton>
-                        </div>
-
-                        <!-- Documents List -->
-                        <div v-else class="space-y-3">
-                            <div
-                                v-for="doc in documents"
-                                :key="doc.id"
-                                class="rounded-lg border border-gray-200 bg-white p-3.5 shadow-sm hover:border-gray-300 transition space-y-2.5"
+                            <button
+                                v-else
+                                type="button"
+                                class="inline-flex items-center gap-1 rounded bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700 shadow-sm transition"
+                                @click="openAddReferenceModal()"
                             >
-                                <div class="flex items-start justify-between gap-2">
-                                    <div class="min-w-0 flex-1">
-                                        <h4 class="text-xs font-bold text-gray-900 truncate" :title="doc.title">
-                                            {{ doc.title }}
-                                        </h4>
-                                        <div class="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400">
-                                            <span class="truncate max-w-[140px]" :title="doc.original_filename">{{ doc.original_filename }}</span>
-                                            <span>&bull;</span>
-                                            <span>{{ formatFileSize(doc.file_size) }}</span>
-                                            <template v-if="doc.total_pages">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                </svg>
+                                + Referensi
+                            </button>
+                        </div>
+
+                        <!-- Sub-tab 1: Documents PDF -->
+                        <div v-if="librarySubTab === 'documents'" class="space-y-4">
+                            <!-- Empty State -->
+                            <div v-if="documents.length === 0" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500 bg-slate-50/50">
+                                <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3 text-lg">
+                                    &#128218;
+                                </div>
+                                <h4 class="font-semibold text-gray-900 mb-1">Research Library Kosong</h4>
+                                <p class="text-xs text-gray-500 mb-4 max-w-xs mx-auto">
+                                    Unggah dokumen PDF jurnal ilmiah untuk membangun basis referensi terisolasi proyek Anda. Maksimal 25MB per file PDF.
+                                </p>
+                                <SecondaryButton class="text-xs" @click="openUploadModal">
+                                    Unggah PDF Dokumen
+                                </SecondaryButton>
+                            </div>
+
+                            <!-- Documents List -->
+                            <div v-else class="space-y-3">
+                                <div
+                                    v-for="doc in documents"
+                                    :key="doc.id"
+                                    class="rounded-lg border border-gray-200 bg-white p-3.5 shadow-sm hover:border-gray-300 transition space-y-2.5"
+                                >
+                                    <div class="flex items-start justify-between gap-2">
+                                        <div class="min-w-0 flex-1">
+                                            <h4 class="text-xs font-bold text-gray-900 truncate" :title="doc.title">
+                                                {{ doc.title }}
+                                            </h4>
+                                            <div class="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400">
+                                                <span class="truncate max-w-[140px]" :title="doc.original_filename">{{ doc.original_filename }}</span>
                                                 <span>&bull;</span>
-                                                <span>{{ doc.total_pages }} Halaman</span>
-                                            </template>
+                                                <span>{{ formatFileSize(doc.file_size) }}</span>
+                                                <template v-if="doc.total_pages">
+                                                    <span>&bull;</span>
+                                                    <span>{{ doc.total_pages }} Halaman</span>
+                                                </template>
+                                            </div>
+                                        </div>
+
+                                        <!-- Observable State Badge -->
+                                        <div class="shrink-0">
+                                            <span
+                                                v-if="doc.status === 'Queued'"
+                                                class="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200"
+                                            >
+                                                <svg class="h-2.5 w-2.5 animate-pulse" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
+                                                Queued
+                                            </span>
+                                            <span
+                                                v-else-if="doc.status === 'Processing'"
+                                                class="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200"
+                                            >
+                                                <svg class="h-2.5 w-2.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                                Processing
+                                            </span>
+                                            <span
+                                                v-else-if="doc.status === 'Processed'"
+                                                class="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200"
+                                            >
+                                                &#10003; Processed
+                                            </span>
+                                            <span
+                                                v-else-if="doc.status === 'Partial'"
+                                                class="inline-flex items-center gap-1 rounded bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700 border border-orange-200"
+                                            >
+                                                &#9888; Partial
+                                            </span>
+                                            <span
+                                                v-else-if="doc.status === 'Failed'"
+                                                class="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 border border-rose-200"
+                                            >
+                                                &#10007; Failed
+                                            </span>
                                         </div>
                                     </div>
 
-                                    <!-- Observable State Badge -->
-                                    <div class="shrink-0">
-                                        <span
-                                            v-if="doc.status === 'Queued'"
-                                            class="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200"
-                                        >
-                                            <svg class="h-2.5 w-2.5 animate-pulse" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
-                                            Queued
-                                        </span>
-                                        <span
-                                            v-else-if="doc.status === 'Processing'"
-                                            class="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200"
-                                        >
-                                            <svg class="h-2.5 w-2.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                            </svg>
-                                            Processing
-                                        </span>
-                                        <span
-                                            v-else-if="doc.status === 'Processed'"
-                                            class="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200"
-                                        >
-                                            &#10003; Processed
-                                        </span>
-                                        <span
-                                            v-else-if="doc.status === 'Partial'"
-                                            class="inline-flex items-center gap-1 rounded bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700 border border-orange-200"
-                                        >
-                                            &#9888; Partial
-                                        </span>
-                                        <span
-                                            v-else-if="doc.status === 'Failed'"
-                                            class="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 border border-rose-200"
-                                        >
-                                            &#10007; Failed
-                                        </span>
+                                    <!-- Error/Warning Notice -->
+                                    <div
+                                        v-if="doc.error_message"
+                                        class="rounded bg-rose-50/70 p-2 text-[11px] text-rose-700 border border-rose-100 break-words"
+                                    >
+                                        {{ doc.error_message }}
                                     </div>
-                                </div>
 
-                                <!-- Error/Warning Notice -->
-                                <div
-                                    v-if="doc.error_message"
-                                    class="rounded bg-rose-50/70 p-2 text-[11px] text-rose-700 border border-rose-100 break-words"
-                                >
-                                    {{ doc.error_message }}
-                                </div>
-
-                                <!-- Actions Bar -->
-                                <div class="flex items-center justify-between pt-1 border-t border-gray-100 text-[11px]">
-                                    <div class="flex items-center gap-2">
+                                    <!-- Actions Bar -->
+                                    <div class="flex items-center justify-between pt-1 border-t border-gray-100 text-[11px]">
+                                        <div class="flex items-center gap-2">
+                                            <button
+                                                v-if="doc.status === 'Failed' || doc.status === 'Partial'"
+                                                type="button"
+                                                class="font-semibold text-indigo-600 hover:text-indigo-800 transition flex items-center gap-1"
+                                                @click="retryDocument(doc)"
+                                            >
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                                Retry
+                                            </button>
+                                            <button
+                                                v-if="doc.status === 'Processed' || doc.status === 'Partial'"
+                                                type="button"
+                                                class="font-semibold text-gray-600 hover:text-gray-900 transition flex items-center gap-1"
+                                                @click="openPagesModal(doc)"
+                                            >
+                                                Lihat Halaman
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="font-semibold text-indigo-600 hover:text-indigo-800 transition"
+                                                title="Daftarkan dokumen ini ke daftar referensi"
+                                                @click="openAddReferenceModal({ title: doc.title, document_id: doc.id })"
+                                            >
+                                                + Jadi Referensi
+                                            </button>
+                                        </div>
                                         <button
-                                            v-if="doc.status === 'Failed' || doc.status === 'Partial'"
                                             type="button"
-                                            class="font-semibold text-indigo-600 hover:text-indigo-800 transition flex items-center gap-1"
-                                            @click="retryDocument(doc)"
+                                            class="text-gray-400 hover:text-rose-600 transition"
+                                            title="Hapus Dokumen"
+                                            @click="deleteDocument(doc)"
                                         >
-                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                            Retry
-                                        </button>
-                                        <button
-                                            v-if="doc.status === 'Processed' || doc.status === 'Partial'"
-                                            type="button"
-                                            class="font-semibold text-gray-600 hover:text-gray-900 transition flex items-center gap-1"
-                                            @click="openPagesModal(doc)"
-                                        >
-                                            Lihat Halaman
+                                            Hapus
                                         </button>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sub-tab 2: Bibliographic References -->
+                        <div v-else-if="librarySubTab === 'references'" class="space-y-4">
+                            <!-- Citation Style Switcher Bar -->
+                            <div class="flex items-center justify-between rounded-lg bg-slate-50 p-2.5 border border-gray-200 text-xs">
+                                <span class="font-bold text-gray-700">Gaya Sitasi:</span>
+                                <div class="inline-flex rounded-md shadow-sm">
                                     <button
                                         type="button"
-                                        class="text-gray-400 hover:text-rose-600 transition"
-                                        title="Hapus Dokumen"
-                                        @click="deleteDocument(doc)"
+                                        class="px-3 py-1 text-xs font-semibold rounded-l-md border transition"
+                                        :class="selectedCitationStyle === 'apa' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+                                        @click="updateCitationStyle('apa')"
                                     >
-                                        Hapus
+                                        APA 7th
                                     </button>
+                                    <button
+                                        type="button"
+                                        class="px-3 py-1 text-xs font-semibold rounded-r-md border-t border-b border-r transition"
+                                        :class="selectedCitationStyle === 'harvard' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+                                        @click="updateCitationStyle('harvard')"
+                                    >
+                                        Harvard
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Empty References -->
+                            <div v-if="references.length === 0" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500 bg-slate-50/50">
+                                <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3 text-lg">
+                                    &#128214;
+                                </div>
+                                <h4 class="font-semibold text-gray-900 mb-1">Belum Ada Referensi Terdaftar</h4>
+                                <p class="text-xs text-gray-500 mb-4 max-w-xs mx-auto">
+                                    Daftarkan sumber referensi via DOI atau formulir metadata manual untuk membangun daftar pustaka Anda.
+                                </p>
+                                <SecondaryButton class="text-xs" @click="openAddReferenceModal()">
+                                    + Tambah Referensi
+                                </SecondaryButton>
+                            </div>
+
+                            <!-- References List -->
+                            <div v-else class="space-y-3">
+                                <div
+                                    v-for="refItem in references"
+                                    :key="refItem.id"
+                                    class="rounded-lg border border-gray-200 bg-white p-3.5 shadow-sm hover:border-gray-300 transition space-y-2"
+                                >
+                                    <!-- Badges Header -->
+                                    <div class="flex items-center justify-between text-[11px] gap-2">
+                                        <div class="flex items-center gap-1.5 flex-wrap">
+                                            <span class="font-mono bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-semibold text-[10px]">
+                                                {{ refItem.reference_key }}
+                                            </span>
+                                            <span class="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700 font-semibold text-[10px]">
+                                                {{ refItem.type === 'article-journal' ? 'Jurnal' : (refItem.type === 'book' ? 'Buku' : (refItem.type === 'paper-conference' ? 'Konferensi' : 'Lainnya')) }}
+                                            </span>
+                                            <span class="text-gray-400 font-mono text-[10px]">
+                                                Sitasi: {{ refItem.in_text_citation }}
+                                            </span>
+                                        </div>
+                                        <span v-if="refItem.document_id" class="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5 shrink-0" title="Terhubung ke PDF">
+                                            &#128196; PDF
+                                        </span>
+                                    </div>
+
+                                    <!-- Formatted Citation Output -->
+                                    <div class="text-xs text-gray-900 leading-relaxed font-serif bg-slate-50/70 p-2.5 rounded border border-gray-100">
+                                        {{ selectedCitationStyle === 'harvard' ? refItem.formatted_harvard : refItem.formatted_apa }}
+                                    </div>
+
+                                    <!-- Missing Fields Warning -->
+                                    <div
+                                        v-if="refItem.missing_field_warnings && Object.keys(refItem.missing_field_warnings).length > 0"
+                                        class="rounded bg-amber-50 p-2 text-[11px] text-amber-800 border border-amber-200"
+                                    >
+                                        <span class="font-bold">&#9888; Metadata Belum Lengkap:</span>
+                                        {{ Object.values(refItem.missing_field_warnings).join(', ') }}
+                                    </div>
+
+                                    <!-- Action Bar -->
+                                    <div class="flex items-center justify-between pt-1 border-t border-gray-100 text-[11px]">
+                                        <button
+                                            type="button"
+                                            class="font-semibold text-indigo-600 hover:text-indigo-800 transition"
+                                            @click="openEditReferenceModal(refItem)"
+                                        >
+                                            Ubah
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="text-gray-400 hover:text-rose-600 transition"
+                                            @click="deleteReference(refItem)"
+                                        >
+                                            Hapus
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1638,6 +1973,239 @@ onUnmounted(() => {
                         Tutup
                     </SecondaryButton>
                 </div>
+            </div>
+        </Modal>
+
+        <!-- Modal: Add / Edit Reference -->
+        <Modal :show="isRefModalOpen" @close="closeRefModal" max-width="2xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4 pb-2 border-b border-gray-100">
+                    <h3 class="text-base font-bold text-gray-900">
+                        {{ !editingReferenceId ? 'Tambah Sumber Referensi' : 'Ubah Sumber Referensi' }}
+                    </h3>
+                    <button type="button" class="text-gray-400 hover:text-gray-600 text-lg" @click="closeRefModal">&times;</button>
+                </div>
+
+                <!-- Fast DOI Import Box (only in create mode) -->
+                <div v-if="!editingReferenceId" class="mb-5 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3.5 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-bold text-indigo-950 flex items-center gap-1">
+                            <span>&#128269;</span> Tarik Otomatis via DOI
+                        </label>
+                        <span class="text-[11px] text-indigo-600">Crossref / DataCite</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <TextInput
+                            v-model="doiInput"
+                            type="text"
+                            placeholder="Contoh: 10.1145/3313831.3376727 atau https://doi.org/..."
+                            class="flex-1 text-xs"
+                            :disabled="isResolvingDoi"
+                            @keyup.enter.prevent="resolveDoiMetadata"
+                        />
+                        <button
+                            type="button"
+                            class="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition"
+                            :disabled="isResolvingDoi || !doiInput.trim()"
+                            @click="resolveDoiMetadata"
+                        >
+                            {{ isResolvingDoi ? 'Mengambil...' : 'Tarik Data' }}
+                        </button>
+                    </div>
+                    <p v-if="doiError" class="text-xs text-rose-600 font-medium">
+                        {{ doiError }}
+                    </p>
+                    <p v-if="doiDuplicateNotice" class="text-xs text-amber-700 bg-amber-100/70 p-2 rounded border border-amber-200">
+                        &#9888; DOI ini sudah terdaftar pada proyek ini. Menyimpan akan membuat duplikasi.
+                    </p>
+                </div>
+
+                <!-- Live Missing Field Warning inside Form -->
+                <div v-if="formMissingWarnings.length > 0" class="mb-4 rounded-md bg-amber-50 p-2.5 text-xs text-amber-800 border border-amber-200">
+                    <span class="font-bold">&#9888; Metadata Belum Lengkap:</span>
+                    Field {{ formMissingWarnings.join(', ') }} belum terisi. Referensi tetap dapat disimpan dan dilengkapi nanti.
+                </div>
+
+                <form @submit.prevent="submitReference" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <InputLabel for="ref_type" value="Jenis Publikasi *" />
+                            <select
+                                id="ref_type"
+                                v-model="refForm.type"
+                                class="mt-1 block w-full rounded-md border-gray-300 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                <option value="article-journal">Artikel Jurnal (article-journal)</option>
+                                <option value="book">Buku (book)</option>
+                                <option value="chapter">Bab Buku (chapter)</option>
+                                <option value="paper-conference">Prosiding Konferensi (paper-conference)</option>
+                                <option value="thesis">Skripsi / Tesis / Disertasi (thesis)</option>
+                                <option value="report">Laporan Teknis (report)</option>
+                                <option value="webpage">Laman Web (webpage)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <InputLabel for="ref_key" value="Kunci Sitasi / Citation Key" />
+                            <TextInput
+                                id="ref_key"
+                                v-model="refForm.reference_key"
+                                type="text"
+                                placeholder="Contoh: Smith2024 (kosong = otomatis)"
+                                class="mt-1 block w-full text-xs font-mono"
+                            />
+                            <p v-if="refForm.errors.reference_key" class="mt-1 text-xs text-rose-600">
+                                {{ refForm.errors.reference_key }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <InputLabel for="ref_title" value="Judul Publikasi *" />
+                        <TextInput
+                            id="ref_title"
+                            v-model="refForm.title"
+                            type="text"
+                            required
+                            placeholder="Judul lengkap artikel atau karya ilmiah"
+                            class="mt-1 block w-full text-xs"
+                        />
+                        <p v-if="refForm.errors.title" class="mt-1 text-xs text-rose-600">
+                            {{ refForm.errors.title }}
+                        </p>
+                    </div>
+
+                    <div>
+                        <InputLabel for="ref_authors" value="Penulis" />
+                        <TextInput
+                            id="ref_authors"
+                            v-model="refForm.authors_text"
+                            type="text"
+                            placeholder="Contoh: Doe, John; Smith, Jane (pisahkan titik koma)"
+                            class="mt-1 block w-full text-xs"
+                        />
+                        <p class="mt-0.5 text-[10px] text-gray-400">
+                            Format nama: "Belakang, Depan" atau "Depan Belakang", pisahkan beberapa penulis dengan titik-koma (;).
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="md:col-span-2">
+                            <InputLabel for="ref_publication" value="Nama Jurnal / Prosiding / Buku" />
+                            <TextInput
+                                id="ref_publication"
+                                v-model="refForm.publication_title"
+                                type="text"
+                                placeholder="Contoh: IEEE Transactions on Software Engineering"
+                                class="mt-1 block w-full text-xs"
+                            />
+                        </div>
+                        <div>
+                            <InputLabel for="ref_year" value="Tahun Terbit" />
+                            <TextInput
+                                id="ref_year"
+                                v-model="refForm.year"
+                                type="number"
+                                placeholder="2024"
+                                class="mt-1 block w-full text-xs"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <InputLabel for="ref_vol" value="Volume" />
+                            <TextInput
+                                id="ref_vol"
+                                v-model="refForm.volume"
+                                type="text"
+                                placeholder="12"
+                                class="mt-1 block w-full text-xs"
+                            />
+                        </div>
+                        <div>
+                            <InputLabel for="ref_iss" value="Issue / No." />
+                            <TextInput
+                                id="ref_iss"
+                                v-model="refForm.issue"
+                                type="text"
+                                placeholder="3"
+                                class="mt-1 block w-full text-xs"
+                            />
+                        </div>
+                        <div>
+                            <InputLabel for="ref_pages" value="Halaman" />
+                            <TextInput
+                                id="ref_pages"
+                                v-model="refForm.pages"
+                                type="text"
+                                placeholder="123-145"
+                                class="mt-1 block w-full text-xs"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <InputLabel for="ref_pub" value="Penerbit (Publisher)" />
+                            <TextInput
+                                id="ref_pub"
+                                v-model="refForm.publisher"
+                                type="text"
+                                placeholder="Contoh: Springer, ACM"
+                                class="mt-1 block w-full text-xs"
+                            />
+                        </div>
+                        <div>
+                            <InputLabel for="ref_place" value="Tempat Terbit (Publisher Place)" />
+                            <TextInput
+                                id="ref_place"
+                                v-model="refForm.publisher_place"
+                                type="text"
+                                placeholder="Contoh: New York, NY"
+                                class="mt-1 block w-full text-xs"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <InputLabel for="ref_doi" value="DOI" />
+                            <TextInput
+                                id="ref_doi"
+                                v-model="refForm.doi"
+                                type="text"
+                                placeholder="10.1145/..."
+                                class="mt-1 block w-full text-xs"
+                            />
+                            <p v-if="refForm.errors.doi" class="mt-1 text-xs text-rose-600">
+                                {{ refForm.errors.doi }}
+                            </p>
+                        </div>
+                        <div>
+                            <InputLabel for="ref_url" value="URL" />
+                            <TextInput
+                                id="ref_url"
+                                v-model="refForm.url"
+                                type="url"
+                                placeholder="https://..."
+                                class="mt-1 block w-full text-xs"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-4">
+                        <SecondaryButton type="button" @click="closeRefModal">
+                            Batal
+                        </SecondaryButton>
+                        <PrimaryButton
+                            type="submit"
+                            :disabled="refForm.processing"
+                            class="text-xs"
+                        >
+                            {{ refForm.processing ? 'Menyimpan...' : (!editingReferenceId ? 'Simpan Referensi' : 'Perbarui Referensi') }}
+                        </PrimaryButton>
+                    </div>
+                </form>
             </div>
         </Modal>
     </AuthenticatedLayout>

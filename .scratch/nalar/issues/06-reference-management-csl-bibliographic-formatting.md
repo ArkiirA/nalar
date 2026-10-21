@@ -4,10 +4,10 @@
 
 **Blocked by:** 05 (Research Library PDF Upload & Queue Worker)
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Resolving a DOI imports standard bibliographic metadata (authors, title, year, journal, volume, pages).
-- [ ] Manual entry form allows adding and editing book, conference, and journal references with missing-field warnings.
-- [ ] System detects duplicate reference titles or DOIs within the same project.
-- [ ] Formats bibliographic reference entries deterministically according to selected project style (APA 7th or Harvard).
-- [ ] Automated tests verify CSL-JSON serialization, duplicate detection, and citation style output.
+- [x] Resolving a DOI imports standard bibliographic metadata (authors, title, year, journal, volume, pages).
+- [x] Manual entry form allows adding and editing book, conference, and journal references with missing-field warnings.
+- [x] System detects duplicate reference titles or DOIs within the same project.
+- [x] Formats bibliographic reference entries deterministically according to selected project style (APA 7th or Harvard).
+- [x] Automated tests verify CSL-JSON serialization, duplicate detection, and citation style output.

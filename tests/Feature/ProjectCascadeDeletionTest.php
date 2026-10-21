@@ -29,6 +29,12 @@ test('deleting a project cascades and wipes all associated child records', funct
     expect(\App\Models\Document::where('project_id', $project->id)->count())->toBe(1);
     expect(\App\Models\DocumentPage::where('project_id', $project->id)->count())->toBe(1);
 
+    $ref = \App\Models\Reference::factory()->create([
+        'project_id' => $project->id,
+        'document_id' => $document->id,
+    ]);
+    expect(\App\Models\Reference::where('project_id', $project->id)->count())->toBe(1);
+
     $response = $this->actingAs($user)->delete("/projects/{$project->id}");
     $response->assertRedirect('/projects');
 
@@ -37,7 +43,9 @@ test('deleting a project cascades and wipes all associated child records', funct
     $this->assertDatabaseMissing('chapters', ['id' => $chapter2->id]);
     $this->assertDatabaseMissing('documents', ['id' => $document->id]);
     $this->assertDatabaseMissing('document_pages', ['id' => $page->id]);
+    $this->assertDatabaseMissing('references', ['id' => $ref->id]);
     expect(Chapter::where('project_id', $project->id)->count())->toBe(0);
     expect(\App\Models\Document::where('project_id', $project->id)->count())->toBe(0);
     expect(\App\Models\DocumentPage::where('project_id', $project->id)->count())->toBe(0);
+    expect(\App\Models\Reference::where('project_id', $project->id)->count())->toBe(0);
 });

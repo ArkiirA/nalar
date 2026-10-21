@@ -59,6 +59,14 @@ class ProjectController extends Controller
             'chapters' => $project->rootChapters()->with('sections')->get(),
             'guidelinePresets' => GuidelinePresets::all(),
             'documents' => $project->documents()->withCount('pages')->get(),
+            'references' => $project->references()->with(['document', 'project'])->get()->map(function ($ref) {
+                return array_merge($ref->toArray(), [
+                    'formatted_apa' => $ref->formatted_apa,
+                    'formatted_harvard' => $ref->formatted_harvard,
+                    'in_text_citation' => $ref->in_text_citation,
+                    'missing_field_warnings' => $ref->getMissingFieldWarnings(),
+                ]);
+            }),
         ]);
     }
 

@@ -40,6 +40,12 @@ Route::middleware('auth')->group(function () {
     Route::delete('/projects/{project}/documents/{document}', [\App\Http\Controllers\DocumentController::class, 'destroy'])->name('projects.documents.destroy')->scopeBindings();
     Route::get('/projects/{project}/documents/{document}/pages', [\App\Http\Controllers\DocumentController::class, 'pages'])->name('projects.documents.pages')->scopeBindings();
 
+    Route::post('/projects/{project}/references/resolve-doi', [\App\Http\Controllers\ReferenceController::class, 'resolveDoi'])->name('projects.references.resolve-doi');
+    Route::post('/projects/{project}/references', [\App\Http\Controllers\ReferenceController::class, 'store'])->name('projects.references.store');
+    Route::patch('/projects/{project}/references/{reference}', [\App\Http\Controllers\ReferenceController::class, 'update'])->name('projects.references.update')->scopeBindings();
+    Route::delete('/projects/{project}/references/{reference}', [\App\Http\Controllers\ReferenceController::class, 'destroy'])->name('projects.references.destroy')->scopeBindings();
+    Route::patch('/projects/{project}/citation-style', [\App\Http\Controllers\ReferenceController::class, 'updateCitationStyle'])->name('projects.citation-style');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

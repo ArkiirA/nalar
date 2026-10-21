@@ -18,6 +18,7 @@ class Project extends Model
         'target_completion_date',
         'guideline_preset',
         'guideline_profile',
+        'citation_style',
     ];
 
     /**
@@ -71,6 +72,11 @@ class Project extends Model
     public function documentPages(): HasMany
     {
         return $this->hasMany(DocumentPage::class);
+    }
+
+    public function references(): HasMany
+    {
+        return $this->hasMany(Reference::class)->latest();
     }
 
     /**
