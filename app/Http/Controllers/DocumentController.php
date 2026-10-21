@@ -9,6 +9,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DocumentController extends Controller
 {
@@ -100,6 +102,24 @@ class DocumentController extends Controller
         return response()->json([
             'document' => $document,
             'pages' => $document->pages()->get(),
+        ]);
+    }
+
+    /**
+     * Stream or download the physical PDF file.
+     */
+    public function file(Request $request, Project $project, Document $document): mixed
+    {
+        Gate::authorize('view', $project);
+        abort_if($document->project_id !== $project->id, 404);
+
+        if (! $document->file_path || ! Storage::disk('local')->exists($document->file_path)) {
+            abort(404, 'File PDF tidak ditemukan di server.');
+        }
+
+        return response()->file(Storage::disk('local')->path($document->file_path), [
+            'Content-Type' => $document->mime_type ?: 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $document->original_filename . '"',
         ]);
     }
 }

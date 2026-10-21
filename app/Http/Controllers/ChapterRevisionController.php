@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 
 class ChapterRevisionController extends Controller
 {
@@ -82,6 +83,19 @@ class ChapterRevisionController extends Controller
 
         abort_if($chapter->project_id !== $project->id, 404);
         abort_if($revision->chapter_id !== $chapter->id, 404);
+
+        if (is_array($revision->content)) {
+            $citedRefIds = Chapter::extractCitationReferenceIds($revision->content);
+            if (! empty($citedRefIds)) {
+                $validRefIds = $project->references()->whereIn('id', $citedRefIds)->pluck('id')->all();
+                $invalidRefIds = array_diff($citedRefIds, $validRefIds);
+                if (! empty($invalidRefIds)) {
+                    throw ValidationException::withMessages([
+                        'revision' => 'Snapshot tidak dapat dipulihkan karena mengandung referensi yang sudah tidak terdaftar dalam proyek ini.',
+                    ]);
+                }
+            }
+        }
 
         $chapter->restoreRevision($revision);
 

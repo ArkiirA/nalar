@@ -54,6 +54,19 @@ class ChapterController extends Controller
             throw ValidationException::withMessages(['parent_id' => 'Item cannot be parented to itself.']);
         }
 
+        if (array_key_exists('content', $validated) && is_array($validated['content'])) {
+            $citedRefIds = Chapter::extractCitationReferenceIds($validated['content']);
+            if (! empty($citedRefIds)) {
+                $validRefIds = $project->references()->whereIn('id', $citedRefIds)->pluck('id')->all();
+                $invalidRefIds = array_diff($citedRefIds, $validRefIds);
+                if (! empty($invalidRefIds)) {
+                    throw ValidationException::withMessages([
+                        'content' => 'Terdapat sitasi yang merujuk pada referensi yang tidak terdaftar dalam proyek ini.',
+                    ]);
+                }
+            }
+        }
+
         $chapter->update($validated);
 
         if (array_key_exists('content', $validated) && $validated['content'] !== null) {

@@ -4,10 +4,10 @@
 
 **Blocked by:** 03 (Chapter Document Tiptap Editor & Continuous Auto-save), 06 (Reference Management & CSL Bibliographic Formatting)
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Custom inline Tiptap node represents citations bound to an internal `reference_id`.
-- [ ] Autocomplete modal lets the student filter registered references by author or title and insert into editor.
-- [ ] In-text citation displays formatted tag (e.g. `(Wijaya, 2023)`).
-- [ ] Clicking a citation node opens a drawer with source metadata and a link to view the uploaded PDF.
-- [ ] Automated tests verify citation node serialization in chapter JSON and prevention of orphaned citation IDs.
+- [x] Custom inline Tiptap node represents citations bound to an internal `reference_id`.
+- [x] Autocomplete modal lets the student filter registered references by author or title and insert into editor.
+- [x] In-text citation displays formatted tag (e.g. `(Wijaya, 2023)`).
+- [x] Clicking a citation node opens a drawer with source metadata and a link to view the uploaded PDF.
+- [x] Automated tests verify citation node serialization in chapter JSON and prevention of orphaned citation IDs.

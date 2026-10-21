@@ -39,6 +39,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/projects/{project}/documents/{document}/retry', [\App\Http\Controllers\DocumentController::class, 'retry'])->name('projects.documents.retry')->scopeBindings();
     Route::delete('/projects/{project}/documents/{document}', [\App\Http\Controllers\DocumentController::class, 'destroy'])->name('projects.documents.destroy')->scopeBindings();
     Route::get('/projects/{project}/documents/{document}/pages', [\App\Http\Controllers\DocumentController::class, 'pages'])->name('projects.documents.pages')->scopeBindings();
+    Route::get('/projects/{project}/documents/{document}/file', [\App\Http\Controllers\DocumentController::class, 'file'])->name('projects.documents.file')->scopeBindings();
 
     Route::post('/projects/{project}/references/resolve-doi', [\App\Http\Controllers\ReferenceController::class, 'resolveDoi'])->name('projects.references.resolve-doi');
     Route::post('/projects/{project}/references', [\App\Http\Controllers\ReferenceController::class, 'store'])->name('projects.references.store');

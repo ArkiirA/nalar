@@ -319,4 +319,16 @@ class Reference extends Model
 
         return CslFormatter::inTextCitation($this, $style);
     }
+
+    /**
+     * Determine if this reference is currently cited in any project chapter or section.
+     */
+    public function isCited(): bool
+    {
+        if (! $this->project_id) {
+            return false;
+        }
+
+        return Chapter::isReferenceCited($this->project_id, $this->id);
+    }
 }

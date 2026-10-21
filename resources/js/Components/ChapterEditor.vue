@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Editor, EditorContent } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import { Table } from '@tiptap/extension-table';
@@ -7,6 +7,7 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { FigureCaption } from '@/Components/extensions/FigureCaption.js';
+import { Citation } from '@/Components/extensions/Citation.js';
 import axios from 'axios';
 
 const props = defineProps({
@@ -18,13 +19,17 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    references: {
+        type: Array,
+        default: () => [],
+    },
     editable: {
         type: Boolean,
         default: true,
     },
 });
 
-const emit = defineEmits(['saved', 'status-change', 'open-revisions', 'save-version']);
+const emit = defineEmits(['saved', 'status-change', 'open-revisions', 'save-version', 'select-citation']);
 
 // Editor state
 const editor = ref(null);
@@ -34,6 +39,12 @@ const lastSavedTime = ref(null);
 const saveTimer = ref(null);
 const paperTheme = ref('white'); // 'white' | 'sepia'
 const isTableDropdownOpen = ref(false);
+
+// Citation autocomplete modal state
+const isCitationModalOpen = ref(false);
+const citationSearchQuery = ref('');
+const selectedCitationIndex = ref(0);
+const citationSearchInput = ref(null);
 
 const clearSaveTimers = () => {
     if (saveTimer.value) {
@@ -147,6 +158,136 @@ const flush = async () => {
     }
 };
 
+// Citation autocomplete & selection methods
+const openCitationModal = () => {
+    isCitationModalOpen.value = true;
+    citationSearchQuery.value = '';
+    selectedCitationIndex.value = 0;
+    nextTick(() => {
+        citationSearchInput.value?.focus();
+    });
+};
+
+const closeCitationModal = () => {
+    isCitationModalOpen.value = false;
+    citationSearchQuery.value = '';
+    editor.value?.commands.focus();
+};
+
+const filteredReferences = computed(() => {
+    const list = props.references || [];
+    const query = citationSearchQuery.value.trim().toLowerCase();
+    if (!query) {
+        return list;
+    }
+    return list.filter((ref) => {
+        const titleMatch = (ref.title || '').toLowerCase().includes(query);
+        const yearMatch = String(ref.year || '').includes(query);
+        const keyMatch = (ref.reference_key || '').toLowerCase().includes(query);
+        const tagMatch = (ref.in_text_citation || '').toLowerCase().includes(query);
+
+        let authorMatch = false;
+        if (Array.isArray(ref.authors)) {
+            authorMatch = ref.authors.some((author) => {
+                if (typeof author === 'string') return author.toLowerCase().includes(query);
+                const family = (author.family || '').toLowerCase();
+                const given = (author.given || '').toLowerCase();
+                const literal = (author.literal || '').toLowerCase();
+                return family.includes(query) || given.includes(query) || literal.includes(query);
+            });
+        }
+
+        return titleMatch || yearMatch || keyMatch || tagMatch || authorMatch;
+    });
+});
+
+const insertSelectedCitation = (reference) => {
+    if (!reference || !editor.value) return;
+
+    const tag = reference.in_text_citation || `(${reference.reference_key || 'Sitasi'})`;
+
+    editor.value.commands.insertCitation({
+        reference_id: reference.id,
+        label: tag,
+        reference_key: reference.reference_key || '',
+    });
+
+    closeCitationModal();
+};
+
+const onModalKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (filteredReferences.value.length > 0) {
+            selectedCitationIndex.value = (selectedCitationIndex.value + 1) % filteredReferences.value.length;
+        }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (filteredReferences.value.length > 0) {
+            selectedCitationIndex.value =
+                (selectedCitationIndex.value - 1 + filteredReferences.value.length) % filteredReferences.value.length;
+        }
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filteredReferences.value[selectedCitationIndex.value]) {
+            insertSelectedCitation(filteredReferences.value[selectedCitationIndex.value]);
+        }
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeCitationModal();
+    }
+};
+
+const insertLiteralAt = () => {
+    closeCitationModal();
+    if (editor.value) {
+        editor.value.chain().focus().insertContent('@').run();
+    }
+};
+
+watch(citationSearchQuery, () => {
+    selectedCitationIndex.value = 0;
+});
+
+const formatAuthorPreview = (authors) => {
+    if (!authors || !authors.length) return '';
+    return authors
+        .map((a) => {
+            if (typeof a === 'string') return a;
+            if (a.literal) return a.literal;
+            return [a.family, a.given].filter(Boolean).join(', ');
+        })
+        .join('; ');
+};
+
+// Sync inline citation labels when references list or project citation style updates
+const syncCitationLabels = () => {
+    if (!editor.value || !props.references?.length) return;
+    const refMap = new Map(props.references.map((r) => [r.id, r.in_text_citation]));
+    const { doc, tr } = editor.value.state;
+    let modified = false;
+
+    doc.descendants((node, pos) => {
+        if (node.type.name === 'citation' && node.attrs.reference_id) {
+            const latestLabel = refMap.get(node.attrs.reference_id);
+            if (latestLabel && latestLabel !== node.attrs.label) {
+                tr.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    label: latestLabel,
+                });
+                modified = true;
+            }
+        }
+    });
+
+    if (modified) {
+        editor.value.view.dispatch(tr);
+    }
+};
+
+watch(() => props.references, syncCitationLabels, { deep: true });
+watch(() => props.project?.citation_style, syncCitationLabels);
+
 // Initialize Tiptap editor
 onMounted(() => {
     editor.value = new Editor({
@@ -165,7 +306,31 @@ onMounted(() => {
             TableHeader,
             TableCell,
             FigureCaption,
+            Citation,
         ],
+        editorProps: {
+            handleKeyDown: (view, event) => {
+                if (event.key === '@' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                    event.preventDefault();
+                    openCitationModal();
+                    return true;
+                }
+                return false;
+            },
+            handleClick: (view, pos, event) => {
+                const citationEl = event.target.closest('[data-type="citation"]');
+                if (citationEl) {
+                    const refId = citationEl.getAttribute('data-reference-id');
+                    if (refId) {
+                        emit('select-citation', {
+                            referenceId: parseInt(refId, 10),
+                        });
+                        return true;
+                    }
+                }
+                return false;
+            },
+        },
         onUpdate: () => {
             queueAutoSave();
         },
@@ -485,6 +650,17 @@ const redo = () => editor.value?.chain().focus().redo().run();
                         >
                             Caption (Gambar/Tabel)
                         </button>
+
+                        <!-- Citation Insertion Button -->
+                        <button
+                            type="button"
+                            title="Sisipkan Sitasi Ilmiah (@)"
+                            class="px-2 py-1 rounded transition border border-gray-200 text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 inline-flex items-center space-x-1 font-medium"
+                            @click="openCitationModal"
+                        >
+                            <span class="font-bold text-indigo-600">@</span>
+                            <span>Sitasi</span>
+                        </button>
                     </div>
                 </div>
 
@@ -603,6 +779,117 @@ const redo = () => editor.value?.chain().focus().redo().run();
 
             <!-- Tiptap Editor Content Stage -->
             <EditorContent :editor="editor" class="focus:outline-none" />
+        </div>
+
+        <!-- Citation Insertion Autocomplete Modal -->
+        <div
+            v-if="isCitationModalOpen"
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs font-sans text-xs"
+            @click.self="closeCitationModal"
+        >
+            <div class="relative w-full max-w-lg rounded-xl bg-white shadow-2xl border border-gray-200 overflow-hidden flex flex-col max-h-[80vh]">
+                <!-- Modal Header -->
+                <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3 bg-slate-50">
+                    <div class="flex items-center space-x-2">
+                        <span class="flex h-6 w-6 items-center justify-center rounded bg-indigo-100 text-indigo-700 font-bold text-xs">
+                            @
+                        </span>
+                        <div>
+                            <h3 class="font-bold text-gray-900 text-sm">Sisipkan Sitasi Ilmiah</h3>
+                            <p class="text-[11px] text-gray-500">Pilih sumber dari Research Library untuk disisipkan ke teks</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        class="text-gray-400 hover:text-gray-600 p-1 rounded text-base leading-none"
+                        @click="closeCitationModal"
+                    >
+                        &times;
+                    </button>
+                </div>
+
+                <!-- Search Input Bar -->
+                <div class="p-3 border-b border-gray-100 bg-white">
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                            &#128269;
+                        </span>
+                        <input
+                            ref="citationSearchInput"
+                            v-model="citationSearchQuery"
+                            type="text"
+                            placeholder="Cari berdasarkan nama penulis, judul artikel, atau tahun..."
+                            class="w-full pl-9 pr-4 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            @keydown="onModalKeyDown"
+                        />
+                    </div>
+                </div>
+
+                <!-- Reference Results List -->
+                <div class="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-[160px] max-h-[380px]">
+                    <div v-if="references.length === 0" class="py-8 text-center text-gray-500 px-4">
+                        <p class="font-semibold text-gray-700 mb-1">Belum Ada Referensi Terdaftar</p>
+                        <p class="text-[11px] text-gray-400 max-w-xs mx-auto">
+                            Daftarkan referensi terlebih dahulu melalui panel Research Library di sebelah kanan untuk menyisipkan sitasi.
+                        </p>
+                    </div>
+                    <div v-else-if="filteredReferences.length === 0" class="py-8 text-center text-gray-400">
+                        Tidak ada referensi yang cocok dengan kata kunci "{{ citationSearchQuery }}".
+                    </div>
+                    <button
+                        v-for="(refItem, index) in filteredReferences"
+                        :key="refItem.id"
+                        type="button"
+                        class="w-full text-left p-2.5 rounded-lg border transition flex flex-col gap-1 cursor-pointer"
+                        :class="index === selectedCitationIndex ? 'bg-indigo-50/80 border-indigo-300 ring-1 ring-indigo-400' : 'bg-white border-gray-200 hover:bg-slate-50 hover:border-gray-300'"
+                        @click="insertSelectedCitation(refItem)"
+                        @mouseenter="selectedCitationIndex = index"
+                    >
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="font-bold text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded text-[11px]">
+                                {{ refItem.in_text_citation || `(${refItem.reference_key})` }}
+                            </span>
+                            <div class="flex items-center space-x-1.5 text-[10px] text-gray-400">
+                                <span v-if="refItem.year">{{ refItem.year }}</span>
+                                <span v-if="refItem.document_id" class="text-emerald-600 font-semibold" title="Ada file PDF">&#128196; PDF</span>
+                            </div>
+                        </div>
+                        <p class="text-xs font-semibold text-gray-900 leading-snug line-clamp-2">
+                            {{ refItem.title }}
+                        </p>
+                        <p v-if="refItem.authors && refItem.authors.length" class="text-[11px] text-gray-500 truncate">
+                            {{ formatAuthorPreview(refItem.authors) }}
+                        </p>
+                    </button>
+                </div>
+
+                <!-- Modal Footer Hint -->
+                <div class="border-t border-gray-100 px-4 py-2 bg-slate-50 flex items-center justify-between text-[11px] text-gray-500">
+                    <div class="flex items-center space-x-2">
+                        <span>Tekan <kbd class="px-1 py-0.5 bg-gray-200 rounded text-[10px]">Enter</kbd> untuk menyisipkan</span>
+                        <span>&bull;</span>
+                        <span><kbd class="px-1 py-0.5 bg-gray-200 rounded text-[10px]">&uarr;&darr;</kbd> navigasi</span>
+                        <span>&bull;</span>
+                        <span><kbd class="px-1 py-0.5 bg-gray-200 rounded text-[10px]">Esc</kbd> batal</span>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <button
+                            type="button"
+                            class="text-indigo-600 hover:text-indigo-800 font-medium hover:underline text-[11px]"
+                            @click="insertLiteralAt"
+                        >
+                            Ketik "@" biasa
+                        </button>
+                        <button
+                            type="button"
+                            class="text-gray-600 hover:text-gray-900 font-medium"
+                            @click="closeCitationModal"
+                        >
+                            Tutup
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>

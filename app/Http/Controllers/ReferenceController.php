@@ -154,6 +154,12 @@ class ReferenceController extends Controller
         Gate::authorize('update', $project);
         abort_if($reference->project_id !== $project->id, 404);
 
+        if ($reference->isCited()) {
+            throw ValidationException::withMessages([
+                'reference' => 'Referensi ini tidak dapat dihapus karena sedang disitasi dalam bab skripsi Anda.',
+            ]);
+        }
+
         $reference->delete();
 
         if ($request->wantsJson()) {

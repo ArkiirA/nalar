@@ -750,10 +750,63 @@ const submitReference = () => {
     }
 };
 
+const activeReferenceDetail = ref(null);
+
+const handleSelectCitation = ({ referenceId }) => {
+    const found = (props.references || []).find((r) => r.id === referenceId);
+    if (found) {
+        activeReferenceDetail.value = found;
+        isToolsOpen.value = true;
+        activeTab.value = 'library';
+        librarySubTab.value = 'references';
+    }
+};
+
+const getLinkedDocument = (refItem) => {
+    if (!refItem?.document_id) return null;
+    return (props.documents || []).find((d) => d.id === refItem.document_id) || refItem.document || null;
+};
+
+const formatRefType = (type) => {
+    switch (type) {
+        case 'article-journal':
+            return 'Jurnal Ilmiah';
+        case 'book':
+            return 'Buku Teks';
+        case 'paper-conference':
+            return 'Prosiding Konferensi';
+        case 'thesis':
+            return 'Skripsi / Tesis';
+        default:
+            return 'Lainnya';
+    }
+};
+
+const formatAuthorNames = (authors) => {
+    if (!authors || !authors.length) return '';
+    return authors
+        .map((a) => {
+            if (typeof a === 'string') return a;
+            if (a.literal) return a.literal;
+            return [a.family, a.given].filter(Boolean).join(', ');
+        })
+        .join('; ');
+};
+
 const deleteReference = (refItem) => {
     if (confirm(`Apakah Anda yakin ingin menghapus referensi "${refItem.title}"?`)) {
         router.delete(route('projects.references.destroy', [props.project.id, refItem.id]), {
             preserveScroll: true,
+            onError: (errors) => {
+                if (errors.reference) {
+                    alert(errors.reference);
+                }
+            },
+            onSuccess: () => {
+                if (activeReferenceDetail.value?.id === refItem.id) {
+                    activeReferenceDetail.value = null;
+                }
+            },
         });
     }
 };
@@ -1047,8 +1100,10 @@ const deleteReference = (refItem) => {
                         ref="editorRef"
                         :project="project"
                         :chapter="activeDocumentItem"
+                        :references="references"
                         @open-revisions="openRevisionsDrawer"
                         @save-version="openSaveVersionModal"
+                        @select-citation="handleSelectCitation"
                     />
                 </div>
 
@@ -1391,6 +1446,14 @@ const deleteReference = (refItem) => {
                                             >
                                                 Lihat Halaman
                                             </button>
+                                            <a
+                                                :href="route('projects.documents.file', [project.id, doc.id])"
+                                                target="_blank"
+                                                class="font-semibold text-indigo-600 hover:text-indigo-800 transition flex items-center gap-1"
+                                                title="Buka file PDF asli di tab baru"
+                                            >
+                                                Buka PDF &nearr;
+                                            </a>
                                             <button
                                                 type="button"
                                                 class="font-semibold text-indigo-600 hover:text-indigo-800 transition"
@@ -1415,101 +1478,264 @@ const deleteReference = (refItem) => {
 
                         <!-- Sub-tab 2: Bibliographic References -->
                         <div v-else-if="librarySubTab === 'references'" class="space-y-4">
-                            <!-- Citation Style Switcher Bar -->
-                            <div class="flex items-center justify-between rounded-lg bg-slate-50 p-2.5 border border-gray-200 text-xs">
-                                <span class="font-bold text-gray-700">Gaya Sitasi:</span>
-                                <div class="inline-flex rounded-md shadow-sm">
+                            <!-- Detail View for Selected Citation/Reference -->
+                            <div v-if="activeReferenceDetail" class="space-y-4">
+                                <div class="flex items-center justify-between pb-2 border-b border-gray-200">
                                     <button
                                         type="button"
-                                        class="px-3 py-1 text-xs font-semibold rounded-l-md border transition"
-                                        :class="selectedCitationStyle === 'apa' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
-                                        @click="updateCitationStyle('apa')"
+                                        class="inline-flex items-center space-x-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition"
+                                        @click="activeReferenceDetail = null"
                                     >
-                                        APA 7th
+                                        <span>&larr;</span>
+                                        <span>Kembali ke Daftar</span>
                                     </button>
-                                    <button
-                                        type="button"
-                                        class="px-3 py-1 text-xs font-semibold rounded-r-md border-t border-b border-r transition"
-                                        :class="selectedCitationStyle === 'harvard' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
-                                        @click="updateCitationStyle('harvard')"
-                                    >
-                                        Harvard
-                                    </button>
+                                    <span class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">
+                                        Detail Sumber Referensi
+                                    </span>
                                 </div>
-                            </div>
 
-                            <!-- Empty References -->
-                            <div v-if="references.length === 0" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500 bg-slate-50/50">
-                                <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3 text-lg">
-                                    &#128214;
-                                </div>
-                                <h4 class="font-semibold text-gray-900 mb-1">Belum Ada Referensi Terdaftar</h4>
-                                <p class="text-xs text-gray-500 mb-4 max-w-xs mx-auto">
-                                    Daftarkan sumber referensi via DOI atau formulir metadata manual untuk membangun daftar pustaka Anda.
-                                </p>
-                                <SecondaryButton class="text-xs" @click="openAddReferenceModal()">
-                                    + Tambah Referensi
-                                </SecondaryButton>
-                            </div>
-
-                            <!-- References List -->
-                            <div v-else class="space-y-3">
-                                <div
-                                    v-for="refItem in references"
-                                    :key="refItem.id"
-                                    class="rounded-lg border border-gray-200 bg-white p-3.5 shadow-sm hover:border-gray-300 transition space-y-2"
-                                >
+                                <div class="rounded-lg border border-indigo-200 bg-white p-3.5 shadow-sm space-y-3">
                                     <!-- Badges Header -->
                                     <div class="flex items-center justify-between text-[11px] gap-2">
-                                        <div class="flex items-center gap-1.5 flex-wrap">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-indigo-600 text-white shadow-xs">
+                                            {{ activeReferenceDetail.in_text_citation || `(${activeReferenceDetail.reference_key})` }}
+                                        </span>
+                                        <div class="flex items-center gap-1.5">
                                             <span class="font-mono bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-semibold text-[10px]">
-                                                {{ refItem.reference_key }}
+                                                {{ activeReferenceDetail.reference_key }}
                                             </span>
                                             <span class="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700 font-semibold text-[10px]">
-                                                {{ refItem.type === 'article-journal' ? 'Jurnal' : (refItem.type === 'book' ? 'Buku' : (refItem.type === 'paper-conference' ? 'Konferensi' : 'Lainnya')) }}
-                                            </span>
-                                            <span class="text-gray-400 font-mono text-[10px]">
-                                                Sitasi: {{ refItem.in_text_citation }}
+                                                {{ formatRefType(activeReferenceDetail.type) }}
                                             </span>
                                         </div>
-                                        <span v-if="refItem.document_id" class="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5 shrink-0" title="Terhubung ke PDF">
-                                            &#128196; PDF
-                                        </span>
                                     </div>
+
+                                    <!-- Title -->
+                                    <h4 class="font-bold text-gray-900 text-sm leading-snug">
+                                        {{ activeReferenceDetail.title }}
+                                    </h4>
 
                                     <!-- Formatted Citation Output -->
-                                    <div class="text-xs text-gray-900 leading-relaxed font-serif bg-slate-50/70 p-2.5 rounded border border-gray-100">
-                                        {{ selectedCitationStyle === 'harvard' ? refItem.formatted_harvard : refItem.formatted_apa }}
+                                    <div class="text-xs text-gray-800 leading-relaxed font-serif bg-slate-50/80 p-2.5 rounded border border-gray-100">
+                                        {{ selectedCitationStyle === 'harvard' ? activeReferenceDetail.formatted_harvard : activeReferenceDetail.formatted_apa }}
                                     </div>
 
-                                    <!-- Missing Fields Warning -->
-                                    <div
-                                        v-if="refItem.missing_field_warnings && Object.keys(refItem.missing_field_warnings).length > 0"
-                                        class="rounded bg-amber-50 p-2 text-[11px] text-amber-800 border border-amber-200"
-                                    >
-                                        <span class="font-bold">&#9888; Metadata Belum Lengkap:</span>
-                                        {{ Object.values(refItem.missing_field_warnings).join(', ') }}
+                                    <!-- Metadata Breakdown -->
+                                    <dl class="text-xs space-y-1.5 divide-y divide-gray-100 pt-1">
+                                        <div v-if="formatAuthorNames(activeReferenceDetail.authors)" class="flex justify-between pt-1">
+                                            <dt class="text-gray-500 font-medium">Penulis:</dt>
+                                            <dd class="text-gray-900 text-right font-medium max-w-[200px]">{{ formatAuthorNames(activeReferenceDetail.authors) }}</dd>
+                                        </div>
+                                        <div v-if="activeReferenceDetail.year" class="flex justify-between pt-1">
+                                            <dt class="text-gray-500 font-medium">Tahun:</dt>
+                                            <dd class="text-gray-900 font-semibold">{{ activeReferenceDetail.year }}</dd>
+                                        </div>
+                                        <div v-if="activeReferenceDetail.publication_title" class="flex justify-between pt-1">
+                                            <dt class="text-gray-500 font-medium">Publikasi / Jurnal:</dt>
+                                            <dd class="text-gray-900 text-right max-w-[200px]">{{ activeReferenceDetail.publication_title }}</dd>
+                                        </div>
+                                        <div v-if="activeReferenceDetail.volume || activeReferenceDetail.issue || activeReferenceDetail.pages" class="flex justify-between pt-1">
+                                            <dt class="text-gray-500 font-medium">Vol / Issue / Hlm:</dt>
+                                            <dd class="text-gray-900 text-right font-mono text-[11px]">
+                                                {{ [activeReferenceDetail.volume ? `Vol. ${activeReferenceDetail.volume}` : '', activeReferenceDetail.issue ? `No. ${activeReferenceDetail.issue}` : '', activeReferenceDetail.pages ? `pp. ${activeReferenceDetail.pages}` : ''].filter(Boolean).join(', ') }}
+                                            </dd>
+                                        </div>
+                                        <div v-if="activeReferenceDetail.publisher" class="flex justify-between pt-1">
+                                            <dt class="text-gray-500 font-medium">Penerbit:</dt>
+                                            <dd class="text-gray-900 text-right max-w-[200px]">{{ activeReferenceDetail.publisher }}</dd>
+                                        </div>
+                                        <div v-if="activeReferenceDetail.doi" class="flex justify-between pt-1 items-center">
+                                            <dt class="text-gray-500 font-medium">DOI:</dt>
+                                            <dd class="text-right">
+                                                <a
+                                                    :href="`https://doi.org/${activeReferenceDetail.doi}`"
+                                                    target="_blank"
+                                                    class="text-indigo-600 hover:text-indigo-800 underline font-mono text-[11px]"
+                                                >
+                                                    {{ activeReferenceDetail.doi }} &nearr;
+                                                </a>
+                                            </dd>
+                                        </div>
+                                        <div v-if="activeReferenceDetail.url" class="flex justify-between pt-1 items-center">
+                                            <dt class="text-gray-500 font-medium">URL:</dt>
+                                            <dd class="text-right truncate max-w-[180px]">
+                                                <a
+                                                    :href="activeReferenceDetail.url"
+                                                    target="_blank"
+                                                    class="text-indigo-600 hover:text-indigo-800 underline font-mono text-[11px]"
+                                                >
+                                                    {{ activeReferenceDetail.url }} &nearr;
+                                                </a>
+                                            </dd>
+                                        </div>
+                                    </dl>
+
+                                    <!-- Source PDF Document Section -->
+                                    <div class="mt-3 pt-3 border-t border-gray-100">
+                                        <h5 class="text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-2 flex items-center space-x-1">
+                                            <span>&#128196;</span>
+                                            <span>Sumber Dokumen PDF</span>
+                                        </h5>
+                                        <div v-if="getLinkedDocument(activeReferenceDetail)" class="rounded-lg bg-slate-50 p-3 border border-gray-200 space-y-2">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <div class="text-xs">
+                                                    <p class="font-semibold text-gray-900 leading-tight">
+                                                        {{ getLinkedDocument(activeReferenceDetail).title }}
+                                                    </p>
+                                                    <p class="text-[11px] text-gray-400 mt-0.5">
+                                                        {{ getLinkedDocument(activeReferenceDetail).total_pages || 0 }} Halaman &bull; {{ formatFileSize(getLinkedDocument(activeReferenceDetail).file_size) }}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center gap-2 pt-2 border-t border-gray-200/60">
+                                                <a
+                                                    :href="route('projects.documents.file', [project.id, getLinkedDocument(activeReferenceDetail).id])"
+                                                    target="_blank"
+                                                    class="inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition"
+                                                >
+                                                    Buka PDF &nearr;
+                                                </a>
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex items-center px-2 py-1 rounded text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition"
+                                                    @click="openPagesModal(getLinkedDocument(activeReferenceDetail))"
+                                                >
+                                                    Lihat Halaman
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div v-else class="rounded bg-gray-50 p-3 text-center text-xs text-gray-500 border border-dashed border-gray-200">
+                                            Tidak ada file PDF yang terhubung ke referensi ini.
+                                        </div>
                                     </div>
 
                                     <!-- Action Bar -->
-                                    <div class="flex items-center justify-between pt-1 border-t border-gray-100 text-[11px]">
+                                    <div class="flex items-center justify-between pt-2 border-t border-gray-100 text-xs">
                                         <button
                                             type="button"
                                             class="font-semibold text-indigo-600 hover:text-indigo-800 transition"
-                                            @click="openEditReferenceModal(refItem)"
+                                            @click="openEditReferenceModal(activeReferenceDetail)"
                                         >
-                                            Ubah
+                                            Ubah Metadata
                                         </button>
                                         <button
                                             type="button"
                                             class="text-gray-400 hover:text-rose-600 transition"
-                                            @click="deleteReference(refItem)"
+                                            @click="deleteReference(activeReferenceDetail)"
                                         >
-                                            Hapus
+                                            Hapus Referensi
                                         </button>
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Full References List (when no reference is actively selected for detail view) -->
+                            <template v-else>
+                                <!-- Citation Style Switcher Bar -->
+                                <div class="flex items-center justify-between rounded-lg bg-slate-50 p-2.5 border border-gray-200 text-xs">
+                                    <span class="font-bold text-gray-700">Gaya Sitasi:</span>
+                                    <div class="inline-flex rounded-md shadow-sm">
+                                        <button
+                                            type="button"
+                                            class="px-3 py-1 text-xs font-semibold rounded-l-md border transition"
+                                            :class="selectedCitationStyle === 'apa' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+                                            @click="updateCitationStyle('apa')"
+                                        >
+                                            APA 7th
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="px-3 py-1 text-xs font-semibold rounded-r-md border-t border-b border-r transition"
+                                            :class="selectedCitationStyle === 'harvard' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+                                            @click="updateCitationStyle('harvard')"
+                                        >
+                                            Harvard
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Empty References -->
+                                <div v-if="references.length === 0" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500 bg-slate-50/50">
+                                    <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3 text-lg">
+                                        &#128214;
+                                    </div>
+                                    <h4 class="font-semibold text-gray-900 mb-1">Belum Ada Referensi Terdaftar</h4>
+                                    <p class="text-xs text-gray-500 mb-4 max-w-xs mx-auto">
+                                        Daftarkan sumber referensi via DOI atau formulir metadata manual untuk membangun daftar pustaka Anda.
+                                    </p>
+                                    <SecondaryButton class="text-xs" @click="openAddReferenceModal()">
+                                        + Tambah Referensi
+                                    </SecondaryButton>
+                                </div>
+
+                                <!-- References List -->
+                                <div v-else class="space-y-3">
+                                    <div
+                                        v-for="refItem in references"
+                                        :key="refItem.id"
+                                        class="rounded-lg border border-gray-200 bg-white p-3.5 shadow-sm hover:border-gray-300 transition space-y-2"
+                                    >
+                                        <!-- Badges Header -->
+                                        <div class="flex items-center justify-between text-[11px] gap-2">
+                                            <div class="flex items-center gap-1.5 flex-wrap">
+                                                <span class="font-mono bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-semibold text-[10px]">
+                                                    {{ refItem.reference_key }}
+                                                </span>
+                                                <span class="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700 font-semibold text-[10px]">
+                                                    {{ formatRefType(refItem.type) }}
+                                                </span>
+                                                <span class="text-gray-400 font-mono text-[10px]">
+                                                    Sitasi: {{ refItem.in_text_citation }}
+                                                </span>
+                                            </div>
+                                            <span v-if="refItem.document_id" class="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5 shrink-0" title="Terhubung ke PDF">
+                                                &#128196; PDF
+                                            </span>
+                                        </div>
+
+                                        <!-- Formatted Citation Output -->
+                                        <div class="text-xs text-gray-900 leading-relaxed font-serif bg-slate-50/70 p-2.5 rounded border border-gray-100">
+                                            {{ selectedCitationStyle === 'harvard' ? refItem.formatted_harvard : refItem.formatted_apa }}
+                                        </div>
+
+                                        <!-- Missing Fields Warning -->
+                                        <div
+                                            v-if="refItem.missing_field_warnings && Object.keys(refItem.missing_field_warnings).length > 0"
+                                            class="rounded bg-amber-50 p-2 text-[11px] text-amber-800 border border-amber-200"
+                                        >
+                                            <span class="font-bold">&#9888; Metadata Belum Lengkap:</span>
+                                            {{ Object.values(refItem.missing_field_warnings).join(', ') }}
+                                        </div>
+
+                                        <!-- Action Bar -->
+                                        <div class="flex items-center justify-between pt-1 border-t border-gray-100 text-[11px]">
+                                            <div class="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    class="font-semibold text-indigo-600 hover:text-indigo-800 transition"
+                                                    @click="activeReferenceDetail = refItem"
+                                                >
+                                                    Detail
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    class="font-semibold text-gray-600 hover:text-gray-900 transition"
+                                                    @click="openEditReferenceModal(refItem)"
+                                                >
+                                                    Ubah
+                                                </button>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                class="text-gray-400 hover:text-rose-600 transition"
+                                                @click="deleteReference(refItem)"
+                                            >
+                                                Hapus
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
                     </div>
 
