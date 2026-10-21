@@ -1,6 +1,6 @@
-# Skripsi Studio Domain Glossary
+# Nalar Domain Glossary
 
-Domain terminology for Skripsi Studio, an AI-assisted research and thesis writing workspace for Indonesian undergraduate students.
+Domain terminology for Nalar, an AI-assisted research and thesis writing workspace for Indonesian undergraduate students.
 
 ## Language
 

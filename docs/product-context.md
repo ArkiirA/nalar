@@ -1,4 +1,4 @@
-# Skripsi Studio — Product Requirements Context
+# Nalar — Product Requirements Context
 
 > **Purpose:** Context document for `/grill-me` and AI-assisted product development.
 >
@@ -6,7 +6,7 @@
 
 ## 1. Product Vision
 
-**Skripsi Studio** is an AI-powered research and thesis workspace for Indonesian undergraduate students.
+**Nalar** is an AI-powered research and thesis workspace for Indonesian undergraduate students.
 
 It supports students throughout the thesis-writing process, from proposal development to final revision, with an initial focus on students actively writing their undergraduate thesis.
 

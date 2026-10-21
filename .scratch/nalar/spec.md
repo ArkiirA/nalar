@@ -1,4 +1,4 @@
-# Skripsi Studio: AI-Powered Research & Thesis Workspace
+# Nalar: AI-Powered Research & Thesis Workspace
 
 **Status:** ready-for-agent
 
@@ -13,7 +13,7 @@ Indonesian undergraduate students (S1) face immense friction and anxiety when wr
 
 ## Solution
 
-Skripsi Studio provides an integrated, lightweight, and trustworthy research and thesis workspace designed specifically for Indonesian undergraduates. It features:
+Nalar provides an integrated, lightweight, and trustworthy research and thesis workspace designed specifically for Indonesian undergraduates. It features:
 - A structured, chapter-segmented editor using authentic academic formatting previews (Times New Roman, 1.5 line spacing, standard margins) within a fast, lightweight web interface.
 - A project-scoped Research Library for managing uploaded PDFs, resolving DOIs, and maintaining CSL-JSON bibliographic records.
 - A Citation Evidence Checker that allows students to highlight any factual claim in their thesis and evaluates whether their uploaded research documents genuinely support or contradict it, presenting traceable source passages and verified page numbers.
@@ -71,7 +71,7 @@ Skripsi Studio provides an integrated, lightweight, and trustworthy research and
 35. As an undergraduate student, I want the checker to admit when sources are insufficient rather than fabricating a connection, so that I do not submit unfounded claims.
 
 ### Thesis Import & Export
-36. As an undergraduate student, I want to import an existing thesis draft from DOCX or PDF, so that I can migrate work already started in Microsoft Word into Skripsi Studio.
+36. As an undergraduate student, I want to import an existing thesis draft from DOCX or PDF, so that I can migrate work already started in Microsoft Word into Nalar.
 37. As an undergraduate student, I want to review candidate chapter splits on an import confirmation screen before importing, so that I can adjust chapter boundaries if the importer misidentifies a heading.
 38. As an undergraduate student, I want to run a pre-export validation check, so that I am notified of uncited references, citations without bibliography entries, or missing chapters before generating a final file.
 39. As an undergraduate student, I want to export my entire thesis as a clean DOCX file, so that I can send it to advisors who require Word files.

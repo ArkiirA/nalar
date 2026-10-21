@@ -4,11 +4,11 @@ Date: 2026-10-21
 
 ## Context
 
-Skripsi Studio requires rich editor interaction (Tiptap), background document processing, citation management, and AI retrieval. The project is developed and maintained by a solo developer using AI coding agents.
+Nalar requires rich editor interaction (Tiptap), background document processing, citation management, and AI retrieval. The project is developed and maintained by a solo developer using AI coding agents.
 
 ## Decision
 
-Build Skripsi Studio as a Laravel 11 modular monolith using Inertia.js (Vue 3) and Tiptap editor. Document extraction and OCR run in native Laravel queue workers utilizing native CLI tools (`pdftotext`, `tesseract-ocr`).
+Build Nalar as a Laravel 11 modular monolith using Inertia.js (Vue 3) and Tiptap editor. Document extraction and OCR run in native Laravel queue workers utilizing native CLI tools (`pdftotext`, `tesseract-ocr`).
 
 ## Consequences
 

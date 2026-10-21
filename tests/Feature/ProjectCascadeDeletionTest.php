@@ -1,0 +1,30 @@
+<?php
+
+use App\Models\Chapter;
+use App\Models\Project;
+use App\Models\User;
+
+test('deleting a project cascades and wipes all associated child records', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->create(['user_id' => $user->id]);
+
+    $chapter1 = Chapter::factory()->create([
+        'project_id' => $project->id,
+        'title' => 'Bab I Pendahuluan',
+    ]);
+
+    $chapter2 = Chapter::factory()->create([
+        'project_id' => $project->id,
+        'title' => 'Bab II Tinjauan Pustaka',
+    ]);
+
+    expect(Chapter::where('project_id', $project->id)->count())->toBe(2);
+
+    $response = $this->actingAs($user)->delete("/projects/{$project->id}");
+    $response->assertRedirect('/projects');
+
+    $this->assertDatabaseMissing('projects', ['id' => $project->id]);
+    $this->assertDatabaseMissing('chapters', ['id' => $chapter1->id]);
+    $this->assertDatabaseMissing('chapters', ['id' => $chapter2->id]);
+    expect(Chapter::where('project_id', $project->id)->count())->toBe(0);
+});
