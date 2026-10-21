@@ -48,6 +48,11 @@ test('background job extracts text page-by-page preserving page numbers and tran
     expect($pages[1]->page_number)->toBe(2);
     expect($pages[1]->content)->toContain('BAB II: Tinjauan Pustaka');
     expect($pages[1]->project_id)->toBe($project->id);
+
+    // Verify candidate passages were chunked and saved
+    $chunks = $document->chunks()->get();
+    expect($chunks)->not->toBeEmpty();
+    expect($chunks->pluck('page_number')->all())->toContain(1, 2);
 });
 
 test('background job transitions to Partial when document contains blank or unreadable pages', function () {

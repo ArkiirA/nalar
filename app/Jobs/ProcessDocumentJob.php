@@ -98,6 +98,10 @@ class ProcessDocumentJob implements ShouldQueue
                     'error_message' => $errorMessage,
                 ]);
             });
+
+            if (in_array($this->document->status, [Document::STATUS_PROCESSED, Document::STATUS_PARTIAL], true)) {
+                GenerateDocumentEmbeddingsJob::dispatch($this->document);
+            }
         } catch (Throwable $e) {
             $this->document->update([
                 'status' => Document::STATUS_FAILED,

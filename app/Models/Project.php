@@ -74,6 +74,11 @@ class Project extends Model
         return $this->hasMany(DocumentPage::class);
     }
 
+    public function documentChunks(): HasMany
+    {
+        return $this->hasMany(DocumentChunk::class);
+    }
+
     public function references(): HasMany
     {
         return $this->hasMany(Reference::class)->latest();
