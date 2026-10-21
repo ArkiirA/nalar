@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ChapterEditor from '@/Components/ChapterEditor.vue';
 import HermesPlugin from '@/Components/HermesPlugin.vue';
 import EvidenceChecker from '@/Components/EvidenceChecker.vue';
+import ResearchLibrary from '@/Components/ResearchLibrary.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
@@ -44,6 +45,14 @@ const handleCheckEvidence = (text) => {
     isToolsOpen.value = true;
     if (text && evidenceCheckerRef.value?.setClaim) {
         evidenceCheckerRef.value.setClaim(text);
+    }
+};
+
+const handleLibraryEvidenceContext = (pageText) => {
+    activeTab.value = 'evidence';
+    isToolsOpen.value = true;
+    if (pageText && evidenceCheckerRef.value?.setClaim) {
+        evidenceCheckerRef.value.setClaim(pageText.slice(0, 500));
     }
 };
 
@@ -607,7 +616,7 @@ const activePresetInfo = computed(() => {
             <!-- Right Column: Expandable Tools Drawer -->
             <aside
                 class="flex flex-col border-l border-gray-200 bg-white transition-all duration-200 ease-in-out shrink-0"
-                :class="isToolsOpen ? (activeTab === 'hermes' || activeTab === 'evidence' ? 'w-96' : 'w-80') : 'w-12 items-center'"
+                :class="isToolsOpen ? (activeTab === 'hermes' || activeTab === 'evidence' || activeTab === 'library' ? 'w-96' : 'w-80') : 'w-12 items-center'"
             >
                 <!-- Drawer Header -->
                 <div class="flex items-center justify-between border-b border-gray-100 p-3">
@@ -623,7 +632,7 @@ const activePresetInfo = computed(() => {
                         <button
                             type="button"
                             class="rounded px-2 py-1 text-xs font-semibold transition"
-                            :class="activeTab === 'library' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-500 hover:text-gray-700'"
+                            :class="activeTab === 'library' ? 'bg-indigo-50 text-indigo-700 font-bold border border-indigo-200' : 'text-gray-500 hover:text-gray-700'"
                             @click="activeTab = 'library'"
                         >
                             Library
@@ -720,19 +729,11 @@ const activePresetInfo = computed(() => {
                     </div>
 
                     <!-- Tab: Research Library -->
-                    <div v-else-if="activeTab === 'library'" class="space-y-4">
-                        <div class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500">
-                            <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3">
-                                &#128218;
-                            </div>
-                            <h4 class="font-semibold text-gray-900 mb-1">Research Library Kosong</h4>
-                            <p class="text-xs text-gray-500 mb-4">
-                                Unggah dokumen PDF jurnal ilmiah untuk membangun basis referensi terisolasi proyek Anda.
-                            </p>
-                            <SecondaryButton disabled class="text-xs opacity-60 cursor-not-allowed">
-                                Unggah PDF Dokumen (Segera hadir)
-                            </SecondaryButton>
-                        </div>
+                    <div v-else-if="activeTab === 'library'">
+                        <ResearchLibrary
+                            :project="project"
+                            @select-evidence-context="handleLibraryEvidenceContext"
+                        />
                     </div>
 
                     <!-- Tab: Evidence Checker -->

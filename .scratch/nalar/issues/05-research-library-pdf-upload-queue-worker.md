@@ -4,10 +4,10 @@
 
 **Blocked by:** 01 (Project Foundation & Tenant Isolation)
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] File uploader accepts PDF files up to 25MB, validating file type and scoping file storage to the active project.
-- [ ] Background job extracts text page-by-page using native CLI utilities, preserving page boundaries.
-- [ ] Documents transition through observable states (`Queued`, `Processing`, `Processed`, `Partial`, `Failed`).
-- [ ] Research Library displays the processing state badge and lets students retry failed jobs.
-- [ ] Automated tests verify background extraction with fixture PDFs, page number tagging, and failure handling.
+- [x] File uploader accepts PDF files up to 25MB, validating file type and scoping file storage to the active project.
+- [x] Background job extracts text page-by-page using native CLI utilities, preserving page boundaries.
+- [x] Documents transition through observable states (`Queued`, `Processing`, `Processed`, `Partial`, `Failed`).
+- [x] Research Library displays the processing state badge and lets students retry failed jobs.
+- [x] Automated tests verify background extraction with fixture PDFs, page number tagging, and failure handling.

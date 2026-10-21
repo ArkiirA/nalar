@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ChapterController;
 use App\Http\Controllers\ChapterRevisionController;
+use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EvidenceCheckerController;
 use App\Http\Controllers\HermesPluginController;
 use App\Http\Controllers\ProfileController;
@@ -40,6 +41,12 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/projects/{project}/hermes/chat', [HermesPluginController::class, 'chat'])->name('projects.hermes.chat');
     Route::post('/projects/{project}/evidence/check', [EvidenceCheckerController::class, 'check'])->name('projects.evidence.check');
+
+    Route::get('/projects/{project}/documents', [DocumentController::class, 'index'])->name('projects.documents.index');
+    Route::post('/projects/{project}/documents', [DocumentController::class, 'store'])->name('projects.documents.store');
+    Route::get('/projects/{project}/documents/{document}', [DocumentController::class, 'show'])->name('projects.documents.show')->scopeBindings();
+    Route::post('/projects/{project}/documents/{document}/retry', [DocumentController::class, 'retry'])->name('projects.documents.retry')->scopeBindings();
+    Route::delete('/projects/{project}/documents/{document}', [DocumentController::class, 'destroy'])->name('projects.documents.destroy')->scopeBindings();
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
