@@ -86,3 +86,13 @@ test('handles hermes process execution failure gracefully', function () {
     $response->assertStatus(500)
         ->assertJsonStructure(['error']);
 });
+
+test('hermes bridge builds valid command array avoiding batch file ampersand pitfall', function () {
+    $bridge = new \App\Services\Ai\HermesBridge();
+    $cmd = $bridge->buildCommand('Review R&D & Deep Learning');
+
+    expect($cmd)->toBeArray()
+        ->and($cmd)->toContain('-z')
+        ->and($cmd)->toContain('Review R&D & Deep Learning');
+});
+

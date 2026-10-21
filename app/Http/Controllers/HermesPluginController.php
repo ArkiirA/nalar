@@ -23,6 +23,8 @@ class HermesPluginController extends Controller
     {
         Gate::authorize('update', $project);
 
+        set_time_limit(180);
+
         $validated = $request->validate([
             'message' => ['required', 'string', 'max:2000'],
             'chapter_id' => ['nullable', 'integer'],

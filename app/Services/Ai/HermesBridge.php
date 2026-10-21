@@ -10,12 +10,11 @@ class HermesBridge
     /**
      * Hermes executable path or fallback command.
      */
-    protected string $executable;
+    protected ?string $configuredBin;
 
-    public function __construct(?string $executable = null)
+    public function __construct(?string $configuredBin = null)
     {
-        $this->executable = $executable 
-            ?: env('HERMES_BIN_PATH', 'hermes');
+        $this->configuredBin = $configuredBin ?: env('HERMES_BIN_PATH');
     }
 
     /**
@@ -36,16 +35,16 @@ class HermesBridge
         }
 
         $fullPrompt = $context 
-            . "Peran Anda: Asisten Riset & Penulisan Skripsi Akademik Indonesia (Nalar Hermes Copilot).\n"
+            . "Peran Anda: Asisten Riset dan Penulisan Skripsi Akademik Indonesia (Nalar Hermes Copilot).\n"
             . "Pertanyaan/Instruksi Mahasiswa: {$prompt}";
 
-        // Windows execution fallback
-        $binary = $this->resolveBinary();
+        $command = $this->buildCommand($fullPrompt);
 
-        $result = Process::timeout(120)->run([$binary, '-z', $fullPrompt]);
+        $result = Process::timeout(180)->run($command);
 
         if ($result->failed()) {
-            throw new RuntimeException("Hermes agent error: " . ($result->error() ?: $result->output()));
+            $msg = trim($result->errorOutput() ?: $result->output());
+            throw new RuntimeException("Hermes agent error (code {$result->exitCode()}): {$msg}");
         }
 
         // ponytail: one-shot CLI execution; upgrade to persistent local hermes daemon/websocket when low latency (<500ms) is required
@@ -53,19 +52,33 @@ class HermesBridge
     }
 
     /**
-     * Resolve binary path on Windows/Unix.
+     * Build command array avoiding Windows batch file (.cmd) ampersand/pipe parsing pitfalls.
      */
-    protected function resolveBinary(): string
+    public function buildCommand(string $prompt): array
     {
-        if (file_exists($this->executable)) {
-            return $this->executable;
+        if ($this->configuredBin) {
+            return [$this->configuredBin, '-z', $prompt];
         }
 
-        $windowsPath = 'C:\\Users\\HP\\AppData\\Local\\hermes\\bin\\hermes.cmd';
-        if (file_exists($windowsPath)) {
-            return $windowsPath;
+        // On Windows with local embedded Hermes, invoke Python directly to avoid cmd.exe batch parsing
+        $windowsPython = 'C:\\Users\\HP\\AppData\\Local\\hermes\\tools\\python-3.14.7+20260901-win32-x64\\python.exe';
+        $windowsAgent = 'C:\\Users\\HP\\AppData\\Local\\hermes\\hermes-agent';
+
+        if (PHP_OS_FAMILY === 'Windows' && file_exists($windowsPython) && is_dir($windowsAgent)) {
+            return [
+                $windowsPython,
+                '-c',
+                'import sys; sys.path.insert(0, r"' . $windowsAgent . '"); from hermes_cli.main import main; sys.exit(main())',
+                '-z',
+                $prompt,
+            ];
         }
 
-        return 'hermes';
+        $windowsCmd = 'C:\\Users\\HP\\AppData\\Local\\hermes\\bin\\hermes.cmd';
+        if (file_exists($windowsCmd)) {
+            return [$windowsCmd, '-z', $prompt];
+        }
+
+        return ['hermes', '-z', $prompt];
     }
 }
