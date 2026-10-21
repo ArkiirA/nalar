@@ -7,6 +7,7 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { FigureCaption } from '@/Components/extensions/FigureCaption.js';
+import RevisionDrawer from '@/Components/RevisionDrawer.vue';
 import axios from 'axios';
 
 const props = defineProps({
@@ -34,6 +35,8 @@ const lastSavedTime = ref(null);
 const saveTimer = ref(null);
 const paperTheme = ref('white'); // 'white' | 'sepia'
 const isTableDropdownOpen = ref(false);
+const isRevisionDrawerOpen = ref(false);
+const lastAutoSnapshotTime = ref(Date.now());
 
 const isSaving = computed(() => saveStatus.value === 'saving');
 const isSaved = computed(() => saveStatus.value === 'saved');
@@ -110,12 +113,51 @@ const saveContent = async (targetId = currentChapterId.value) => {
             chapter: response.data.chapter,
             savedAt: response.data.saved_at,
         });
+
+        // Trigger background snapshot if 5 minutes elapsed since last snapshot
+        if (Date.now() - lastAutoSnapshotTime.value >= 300000) {
+            triggerAutoSnapshot(targetId);
+        }
     } catch (err) {
         console.error('Failed to auto-save chapter content:', err);
         if (targetId === currentChapterId.value) {
             saveStatus.value = 'error';
             emit('status-change', 'error');
         }
+    }
+};
+
+// Trigger background auto-snapshot to server
+const triggerAutoSnapshot = async (targetId = currentChapterId.value) => {
+    if (!editor.value || !targetId || !props.project?.id) return;
+    const jsonContent = editor.value.getJSON();
+    try {
+        await axios.post(
+            route('projects.chapters.revisions.auto', [props.project.id, targetId]),
+            { content: jsonContent }
+        );
+        lastAutoSnapshotTime.value = Date.now();
+    } catch (e) {
+        console.error('Failed to trigger background auto-snapshot:', e);
+    }
+};
+
+// Handle restore revision from drawer
+const handleRevisionRestored = (updatedChapter) => {
+    if (editor.value && updatedChapter) {
+        const nextContent = updatedChapter.content || getInitialContent(updatedChapter);
+        editor.value.commands.setContent(nextContent, false);
+        saveStatus.value = 'saved';
+        const now = new Date();
+        lastSavedTime.value = now.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        });
+        emit('saved', {
+            chapter: updatedChapter,
+            savedAt: new Date().toISOString(),
+        });
     }
 };
 
@@ -469,8 +511,21 @@ const redo = () => editor.value?.chain().focus().redo().run();
                     </div>
                 </div>
 
-                <!-- Right Toolbar Groups: Theme Toggle, Word Count & Auto-save Status Indicator -->
-                <div class="flex items-center space-x-3">
+                <!-- Right Toolbar Groups: Revision History, Theme Toggle, Word Count & Auto-save Status Indicator -->
+                <div class="flex items-center space-x-2">
+                    <!-- Version History Button -->
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1 px-2 py-1 rounded border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50 text-[11px] font-medium text-gray-700 hover:text-emerald-800 transition"
+                        title="Lihat riwayat versi & pemulihan bab"
+                        @click="isRevisionDrawerOpen = true"
+                    >
+                        <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Riwayat Versi</span>
+                    </button>
+
                     <!-- Paper Theme Switcher -->
                     <div class="flex items-center rounded border border-gray-200 p-0.5 bg-gray-50 text-[11px]">
                         <button
@@ -565,5 +620,14 @@ const redo = () => editor.value?.chain().focus().redo().run();
             <!-- Tiptap Editor Content Stage -->
             <EditorContent :editor="editor" class="focus:outline-none" />
         </div>
+
+        <!-- Revision History & Rollback Drawer -->
+        <RevisionDrawer
+            :show="isRevisionDrawerOpen"
+            :project="project"
+            :chapter="chapter"
+            @close="isRevisionDrawerOpen = false"
+            @restored="handleRevisionRestored"
+        />
     </div>
 </template>

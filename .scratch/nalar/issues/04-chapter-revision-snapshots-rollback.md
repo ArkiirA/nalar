@@ -4,10 +4,10 @@
 
 **Blocked by:** 03 (Chapter Document Tiptap Editor & Continuous Auto-save)
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] Automatic background snapshots recorded every 5 minutes during active edits (capped at 50 snapshots per chapter).
-- [ ] Student can create a named manual snapshot checkpoint at any time.
-- [ ] Revision drawer lists chronological snapshots with relative timestamps.
-- [ ] Student can preview a previous snapshot and click "Restore this version" to roll back the editor.
-- [ ] Automated tests verify snapshot frequency rules, cap limits, and restoration integrity.
+- [x] Automatic background snapshots recorded every 5 minutes during active edits (capped at 50 snapshots per chapter).
+- [x] Student can create a named manual snapshot checkpoint at any time.
+- [x] Revision drawer lists chronological snapshots with relative timestamps.
+- [x] Student can preview a previous snapshot and click "Restore this version" to roll back the editor.
+- [x] Automated tests verify snapshot frequency rules, cap limits, and restoration integrity.

@@ -46,4 +46,9 @@ class Chapter extends Model
     {
         return $this->hasMany(Chapter::class, 'parent_id')->orderBy('order');
     }
+
+    public function revisions(): HasMany
+    {
+        return $this->hasMany(ChapterRevision::class)->latest('created_at');
+    }
 }
