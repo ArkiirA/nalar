@@ -58,6 +58,7 @@ class ProjectController extends Controller
             'project' => $project,
             'chapters' => $project->rootChapters()->with('sections')->get(),
             'guidelinePresets' => GuidelinePresets::all(),
+            'documents' => $project->documents()->withCount('pages')->get(),
         ]);
     }
 

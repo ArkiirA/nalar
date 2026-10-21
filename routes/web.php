@@ -35,6 +35,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/projects/{project}/chapters/{chapter}/revisions/{revision}', [ChapterRevisionController::class, 'show'])->name('projects.chapters.revisions.show')->scopeBindings();
     Route::post('/projects/{project}/chapters/{chapter}/revisions/{revision}/restore', [ChapterRevisionController::class, 'restore'])->name('projects.chapters.revisions.restore')->scopeBindings();
 
+    Route::post('/projects/{project}/documents', [\App\Http\Controllers\DocumentController::class, 'store'])->name('projects.documents.store');
+    Route::post('/projects/{project}/documents/{document}/retry', [\App\Http\Controllers\DocumentController::class, 'retry'])->name('projects.documents.retry')->scopeBindings();
+    Route::delete('/projects/{project}/documents/{document}', [\App\Http\Controllers\DocumentController::class, 'destroy'])->name('projects.documents.destroy')->scopeBindings();
+    Route::get('/projects/{project}/documents/{document}/pages', [\App\Http\Controllers\DocumentController::class, 'pages'])->name('projects.documents.pages')->scopeBindings();
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

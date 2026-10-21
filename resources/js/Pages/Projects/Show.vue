@@ -9,7 +9,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import axios from 'axios';
 
 const props = defineProps({
@@ -24,6 +24,10 @@ const props = defineProps({
     guidelinePresets: {
         type: Object,
         default: () => ({}),
+    },
+    documents: {
+        type: Array,
+        default: () => [],
     },
 });
 
@@ -406,6 +410,155 @@ watch(
         }
     }
 );
+
+// Research Library state & actions
+const isUploadModalOpen = ref(false);
+const uploadError = ref('');
+const uploadForm = useForm({
+    title: '',
+    file: null,
+});
+
+const openUploadModal = () => {
+    uploadError.value = '';
+    uploadForm.reset();
+    isUploadModalOpen.value = true;
+};
+
+const closeUploadModal = () => {
+    isUploadModalOpen.value = false;
+    uploadError.value = '';
+    uploadForm.reset();
+};
+
+const onFileSelected = (event) => {
+    const file = event.target.files?.[0];
+    uploadError.value = '';
+    if (!file) {
+        uploadForm.file = null;
+        return;
+    }
+
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        uploadError.value = 'Hanya file format PDF yang diperbolehkan.';
+        uploadForm.file = null;
+        return;
+    }
+
+    const maxBytes = 25 * 1024 * 1024;
+    if (file.size > maxBytes) {
+        uploadError.value = 'Ukuran file melebihi batas maksimum 25MB.';
+        uploadForm.file = null;
+        return;
+    }
+
+    uploadForm.file = file;
+    if (!uploadForm.title) {
+        uploadForm.title = file.name.replace(/\.pdf$/i, '');
+    }
+};
+
+const submitUpload = () => {
+    if (!uploadForm.file) {
+        uploadError.value = 'Silakan pilih file PDF terlebih dahulu.';
+        return;
+    }
+
+    uploadForm.post(route('projects.documents.store', props.project.id), {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            closeUploadModal();
+        },
+        onError: (errors) => {
+            if (errors.file) {
+                uploadError.value = errors.file;
+            }
+        },
+    });
+};
+
+const retryDocument = (doc) => {
+    router.post(route('projects.documents.retry', [props.project.id, doc.id]), {}, {
+        preserveScroll: true,
+    });
+};
+
+const deleteDocument = (doc) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus dokumen "${doc.title}"? Seluruh ekstraksi halaman akan dihapus.`)) {
+        router.delete(route('projects.documents.destroy', [props.project.id, doc.id]), {
+            preserveScroll: true,
+        });
+    }
+};
+
+// Document Pages Viewer Modal
+const isPagesModalOpen = ref(false);
+const viewingDocument = ref(null);
+const viewingPages = ref([]);
+const isLoadingPages = ref(false);
+
+const openPagesModal = async (doc) => {
+    viewingDocument.value = doc;
+    isPagesModalOpen.value = true;
+    isLoadingPages.value = true;
+    viewingPages.value = [];
+
+    try {
+        const response = await axios.get(route('projects.documents.pages', [props.project.id, doc.id]));
+        viewingPages.value = response.data.pages || [];
+    } catch (err) {
+        console.error('Failed to load document pages:', err);
+    } finally {
+        isLoadingPages.value = false;
+    }
+};
+
+const closePagesModal = () => {
+    isPagesModalOpen.value = false;
+    viewingDocument.value = null;
+    viewingPages.value = [];
+};
+
+const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
+
+// Auto-polling when documents are queued or processing
+let pollTimer = null;
+const hasPendingDocuments = computed(() => {
+    return (props.documents || []).some((doc) => doc.status === 'Queued' || doc.status === 'Processing');
+});
+
+const updatePolling = () => {
+    if (hasPendingDocuments.value) {
+        if (!pollTimer) {
+            pollTimer = setInterval(() => {
+                router.reload({ only: ['documents'], preserveScroll: true });
+            }, 3000);
+        }
+    } else {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+        }
+    }
+};
+
+watch(hasPendingDocuments, () => {
+    updatePolling();
+}, { immediate: true });
+
+onUnmounted(() => {
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+});
 </script>
 
 <template>
@@ -889,17 +1042,139 @@ watch(
 
                     <!-- Tab: Research Library -->
                     <div v-else-if="activeTab === 'library'" class="space-y-4">
-                        <div class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500">
-                            <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3">
+                        <!-- Header with counts and upload button -->
+                        <div class="flex items-center justify-between pb-2 border-b border-gray-100">
+                            <div>
+                                <span class="block text-[11px] font-bold uppercase tracking-wider text-gray-400">Research Library</span>
+                                <span class="text-xs text-gray-500">{{ documents.length }} Dokumen Riset</span>
+                            </div>
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1 rounded bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700 shadow-sm transition"
+                                @click="openUploadModal"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                </svg>
+                                Unggah PDF
+                            </button>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div v-if="documents.length === 0" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500 bg-slate-50/50">
+                            <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3 text-lg">
                                 &#128218;
                             </div>
                             <h4 class="font-semibold text-gray-900 mb-1">Research Library Kosong</h4>
-                            <p class="text-xs text-gray-500 mb-4">
-                                Unggah dokumen PDF jurnal ilmiah untuk membangun basis referensi terisolasi proyek Anda.
+                            <p class="text-xs text-gray-500 mb-4 max-w-xs mx-auto">
+                                Unggah dokumen PDF jurnal ilmiah untuk membangun basis referensi terisolasi proyek Anda. Maksimal 25MB per file PDF.
                             </p>
-                            <SecondaryButton disabled class="text-xs opacity-60 cursor-not-allowed">
-                                Unggah PDF Dokumen (Segera hadir)
+                            <SecondaryButton class="text-xs" @click="openUploadModal">
+                                Unggah PDF Dokumen
                             </SecondaryButton>
+                        </div>
+
+                        <!-- Documents List -->
+                        <div v-else class="space-y-3">
+                            <div
+                                v-for="doc in documents"
+                                :key="doc.id"
+                                class="rounded-lg border border-gray-200 bg-white p-3.5 shadow-sm hover:border-gray-300 transition space-y-2.5"
+                            >
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0 flex-1">
+                                        <h4 class="text-xs font-bold text-gray-900 truncate" :title="doc.title">
+                                            {{ doc.title }}
+                                        </h4>
+                                        <div class="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400">
+                                            <span class="truncate max-w-[140px]" :title="doc.original_filename">{{ doc.original_filename }}</span>
+                                            <span>&bull;</span>
+                                            <span>{{ formatFileSize(doc.file_size) }}</span>
+                                            <template v-if="doc.total_pages">
+                                                <span>&bull;</span>
+                                                <span>{{ doc.total_pages }} Halaman</span>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                    <!-- Observable State Badge -->
+                                    <div class="shrink-0">
+                                        <span
+                                            v-if="doc.status === 'Queued'"
+                                            class="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200"
+                                        >
+                                            <svg class="h-2.5 w-2.5 animate-pulse" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
+                                            Queued
+                                        </span>
+                                        <span
+                                            v-else-if="doc.status === 'Processing'"
+                                            class="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200"
+                                        >
+                                            <svg class="h-2.5 w-2.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            Processing
+                                        </span>
+                                        <span
+                                            v-else-if="doc.status === 'Processed'"
+                                            class="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200"
+                                        >
+                                            &#10003; Processed
+                                        </span>
+                                        <span
+                                            v-else-if="doc.status === 'Partial'"
+                                            class="inline-flex items-center gap-1 rounded bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700 border border-orange-200"
+                                        >
+                                            &#9888; Partial
+                                        </span>
+                                        <span
+                                            v-else-if="doc.status === 'Failed'"
+                                            class="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 border border-rose-200"
+                                        >
+                                            &#10007; Failed
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- Error/Warning Notice -->
+                                <div
+                                    v-if="doc.error_message"
+                                    class="rounded bg-rose-50/70 p-2 text-[11px] text-rose-700 border border-rose-100 break-words"
+                                >
+                                    {{ doc.error_message }}
+                                </div>
+
+                                <!-- Actions Bar -->
+                                <div class="flex items-center justify-between pt-1 border-t border-gray-100 text-[11px]">
+                                    <div class="flex items-center gap-2">
+                                        <button
+                                            v-if="doc.status === 'Failed' || doc.status === 'Partial'"
+                                            type="button"
+                                            class="font-semibold text-indigo-600 hover:text-indigo-800 transition flex items-center gap-1"
+                                            @click="retryDocument(doc)"
+                                        >
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                            Retry
+                                        </button>
+                                        <button
+                                            v-if="doc.status === 'Processed' || doc.status === 'Partial'"
+                                            type="button"
+                                            class="font-semibold text-gray-600 hover:text-gray-900 transition flex items-center gap-1"
+                                            @click="openPagesModal(doc)"
+                                        >
+                                            Lihat Halaman
+                                        </button>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="text-gray-400 hover:text-rose-600 transition"
+                                        title="Hapus Dokumen"
+                                        @click="deleteDocument(doc)"
+                                    >
+                                        Hapus
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -1248,6 +1523,121 @@ watch(
                         </PrimaryButton>
                     </div>
                 </form>
+            </div>
+        </Modal>
+
+        <!-- Modal: Upload PDF Document to Research Library -->
+        <Modal :show="isUploadModalOpen" @close="closeUploadModal">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4 pb-2 border-b border-gray-100">
+                    <h3 class="text-base font-bold text-gray-900">
+                        Unggah Paper Riset ke Research Library
+                    </h3>
+                    <button type="button" class="text-gray-400 hover:text-gray-600 text-lg" @click="closeUploadModal">&times;</button>
+                </div>
+
+                <form @submit.prevent="submitUpload" class="space-y-4">
+                    <div>
+                        <InputLabel for="upload_doc_title" value="Judul Dokumen (Opsional)" />
+                        <TextInput
+                            id="upload_doc_title"
+                            v-model="uploadForm.title"
+                            type="text"
+                            class="mt-1 block w-full text-sm"
+                            placeholder="Contoh: Analisis Sentimen Algoritma SVM"
+                        />
+                        <p class="mt-1 text-[11px] text-gray-400">Kosongkan untuk menggunakan nama file asli secara otomatis.</p>
+                    </div>
+
+                    <div>
+                        <InputLabel for="upload_doc_file" value="Pilih File PDF (Maks. 25MB)" />
+                        <input
+                            ref="uploadFileInput"
+                            id="upload_doc_file"
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            class="mt-1 block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer border border-gray-300 rounded p-1"
+                            @change="onFileSelected"
+                        />
+                        <p v-if="uploadError" class="mt-1 text-xs text-rose-600 font-medium">
+                            {{ uploadError }}
+                        </p>
+                    </div>
+
+                    <div class="rounded-md bg-amber-50 p-3 border border-amber-200 text-xs text-amber-800">
+                        <p class="font-semibold mb-1">Catatan Pemrosesan:</p>
+                        <p class="text-[11px] leading-relaxed">
+                            File PDF akan diproses di latar belakang secara bertahap per halaman menggunakan ekstraksi teks native dan OCR. Anda dapat terus menulis bab selagi dokumen diproses.
+                        </p>
+                    </div>
+
+                    <div class="mt-6 flex justify-end gap-2">
+                        <SecondaryButton type="button" @click="closeUploadModal">
+                            Batal
+                        </SecondaryButton>
+                        <PrimaryButton
+                            type="submit"
+                            :disabled="uploadForm.processing || !uploadForm.file"
+                            class="text-xs"
+                        >
+                            {{ uploadForm.processing ? 'Mengunggah...' : 'Unggah & Proses' }}
+                        </PrimaryButton>
+                    </div>
+                </form>
+            </div>
+        </Modal>
+
+        <!-- Modal: View Extracted Pages -->
+        <Modal :show="isPagesModalOpen" @close="closePagesModal" max-width="2xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4 pb-2 border-b border-gray-100">
+                    <div>
+                        <h3 class="text-base font-bold text-gray-900 truncate max-w-md">
+                            {{ viewingDocument?.title }}
+                        </h3>
+                        <p class="text-xs text-gray-500">
+                            Ekstraksi Halaman PDF ({{ viewingPages.length }} Halaman)
+                        </p>
+                    </div>
+                    <button type="button" class="text-gray-400 hover:text-gray-600 text-lg" @click="closePagesModal">&times;</button>
+                </div>
+
+                <div v-if="isLoadingPages" class="py-12 text-center text-xs text-gray-500">
+                    <svg class="mx-auto h-6 w-6 animate-spin text-indigo-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Memuat teks halaman terekstraksi...
+                </div>
+
+                <div v-else-if="viewingPages.length === 0" class="py-8 text-center text-xs text-gray-500">
+                    Tidak ada halaman yang dapat ditampilkan.
+                </div>
+
+                <div v-else class="max-h-[60vh] overflow-y-auto space-y-4 pr-1">
+                    <div
+                        v-for="page in viewingPages"
+                        :key="page.id"
+                        class="rounded-lg border border-gray-200 bg-slate-50/50 p-4 space-y-2"
+                    >
+                        <div class="flex items-center justify-between text-xs font-bold text-gray-700 border-b border-gray-200/60 pb-1.5">
+                            <span class="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-indigo-700">
+                                Halaman {{ page.page_number }}
+                            </span>
+                            <span class="text-[11px] text-gray-400 font-normal">
+                                {{ page.character_count }} karakter
+                            </span>
+                        </div>
+                        <div class="whitespace-pre-wrap font-mono text-xs text-gray-800 leading-relaxed max-h-48 overflow-y-auto bg-white p-3 rounded border border-gray-100">
+                            {{ page.content || '(Halaman kosong / tidak ada teks)' }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end">
+                    <SecondaryButton type="button" @click="closePagesModal">
+                        Tutup
+                    </SecondaryButton>
+                </div>
             </div>
         </Modal>
     </AuthenticatedLayout>

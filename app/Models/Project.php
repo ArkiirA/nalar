@@ -63,6 +63,16 @@ class Project extends Model
         return $this->chapters();
     }
 
+    public function documents(): HasMany
+    {
+        return $this->hasMany(Document::class)->latest();
+    }
+
+    public function documentPages(): HasMany
+    {
+        return $this->hasMany(DocumentPage::class);
+    }
+
     /**
      * Apply a guideline preset to the project and populate default chapters and sections.
      */
