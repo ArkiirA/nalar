@@ -16,6 +16,8 @@ class Project extends Model
         'user_id',
         'title',
         'target_completion_date',
+        'guideline_preset',
+        'guideline_profile',
     ];
 
     /**
@@ -27,6 +29,7 @@ class Project extends Model
     {
         return [
             'target_completion_date' => 'date:Y-m-d',
+            'guideline_profile' => 'array',
         ];
     }
 
@@ -42,6 +45,29 @@ class Project extends Model
 
     public function chapters(): HasMany
     {
-        return $this->hasMany(Chapter::class);
+        return $this->hasMany(Chapter::class)->orderBy('order');
+    }
+
+    public function rootChapters(): HasMany
+    {
+        return $this->chapters()->whereNull('parent_id');
+    }
+
+    public function outlineItems(): HasMany
+    {
+        return $this->chapters();
+    }
+
+    public function allChapters(): HasMany
+    {
+        return $this->chapters();
+    }
+
+    /**
+     * Apply a guideline preset to the project and populate default chapters and sections.
+     */
+    public function applyGuidelinePreset(string $presetKey): void
+    {
+        \App\Support\GuidelinePresets::applyToProject($this, $presetKey);
     }
 }

@@ -15,6 +15,10 @@ const props = defineProps({
         type: Array,
         required: true,
     },
+    guidelinePresets: {
+        type: Object,
+        default: () => ({}),
+    },
 });
 
 const isCreating = ref(false);
@@ -22,6 +26,7 @@ const isCreating = ref(false);
 const form = useForm({
     title: '',
     target_completion_date: '',
+    guideline_preset: 'universal_s1',
 });
 
 const openCreateModal = () => {
@@ -77,9 +82,15 @@ const deleteProject = (id, title) => {
                             <h3 class="text-lg font-bold text-gray-900 mb-2">
                                 {{ project.title }}
                             </h3>
-                            <p v-if="project.target_completion_date" class="text-sm text-gray-500 mb-4">
+                            <p v-if="project.target_completion_date" class="text-sm text-gray-500 mb-2">
                                 Target: {{ project.target_completion_date }}
                             </p>
+                            <span
+                                v-if="project.guideline_preset"
+                                class="inline-block rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700"
+                            >
+                                {{ guidelinePresets[project.guideline_preset]?.short_name || project.guideline_preset.toUpperCase() }}
+                            </span>
                         </div>
 
                         <div class="mt-4 flex items-center justify-between pt-4 border-t border-gray-100">
@@ -120,6 +131,27 @@ const deleteProject = (id, title) => {
                             placeholder="e.g. Analisis Sentimen Ulasan Kampus Menggunakan IndoBERT"
                         />
                         <InputError class="mt-2" :message="form.errors.title" />
+                    </div>
+
+                    <div class="mt-4">
+                        <InputLabel for="guideline_preset" value="Campus Guideline Preset" />
+                        <select
+                            id="guideline_preset"
+                            v-model="form.guideline_preset"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                        >
+                            <option
+                                v-for="(preset, key) in guidelinePresets"
+                                :key="key"
+                                :value="key"
+                            >
+                                {{ preset.name }}
+                            </option>
+                        </select>
+                        <p v-if="guidelinePresets[form.guideline_preset]" class="mt-1 text-xs text-gray-500">
+                            {{ guidelinePresets[form.guideline_preset]?.description }}
+                        </p>
+                        <InputError class="mt-2" :message="form.errors.guideline_preset" />
                     </div>
 
                     <div class="mt-4">

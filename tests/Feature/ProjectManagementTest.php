@@ -53,6 +53,7 @@ test('authenticated user can view their list of projects', function () {
     $response->assertInertia(fn ($page) => $page
         ->component('Projects/Index')
         ->has('projects', 1)
+        ->has('guidelinePresets')
         ->where('projects.0.id', $userProject->id)
         ->where('projects.0.title', 'My Thesis Project')
     );

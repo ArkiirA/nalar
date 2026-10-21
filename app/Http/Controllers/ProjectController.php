@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Project;
+use App\Support\GuidelinePresets;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -18,6 +20,7 @@ class ProjectController extends Controller
     {
         return Inertia::render('Projects/Index', [
             'projects' => $request->user()->projects()->latest()->get(),
+            'guidelinePresets' => GuidelinePresets::all(),
         ]);
     }
 
@@ -29,9 +32,17 @@ class ProjectController extends Controller
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'target_completion_date' => ['nullable', 'date'],
+            'guideline_preset' => ['nullable', 'string', Rule::in(array_keys(GuidelinePresets::all()))],
         ]);
 
-        $request->user()->projects()->create($validated);
+        $project = $request->user()->projects()->create([
+            'title' => $validated['title'],
+            'target_completion_date' => $validated['target_completion_date'] ?? null,
+        ]);
+
+        if (! empty($validated['guideline_preset'])) {
+            GuidelinePresets::applyToProject($project, $validated['guideline_preset']);
+        }
 
         return redirect()->route('projects.index');
     }
@@ -45,6 +56,8 @@ class ProjectController extends Controller
 
         return Inertia::render('Projects/Show', [
             'project' => $project,
+            'chapters' => $project->rootChapters()->with('sections')->get(),
+            'guidelinePresets' => GuidelinePresets::all(),
         ]);
     }
 
