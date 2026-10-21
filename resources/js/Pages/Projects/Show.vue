@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ChapterEditor from '@/Components/ChapterEditor.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
@@ -33,6 +34,7 @@ const activeTab = ref('guidelines'); // 'guidelines' | 'library' | 'evidence'
 // Active chapter & section selection
 const selectedChapterId = ref(props.chapters.length > 0 ? props.chapters[0].id : null);
 const selectedSectionId = ref(null);
+const editorRef = ref(null);
 
 const activeChapter = computed(() => {
     return props.chapters.find((c) => c.id === selectedChapterId.value) || null;
@@ -43,12 +45,30 @@ const activeSection = computed(() => {
     return activeChapter.value.sections?.find((s) => s.id === selectedSectionId.value) || null;
 });
 
-const selectChapter = (chapter) => {
+const activeDocumentItem = computed(() => {
+    return activeSection.value || activeChapter.value;
+});
+
+const flushEditor = async () => {
+    if (editorRef.value?.flush) {
+        try {
+            await editorRef.value.flush();
+        } catch (e) {
+            console.error('Failed to flush chapter edits:', e);
+        }
+    }
+};
+
+const selectChapter = async (chapter) => {
+    if (activeDocumentItem.value?.id === chapter.id && !selectedSectionId.value) return;
+    await flushEditor();
     selectedChapterId.value = chapter.id;
     selectedSectionId.value = null;
 };
 
-const selectSection = (chapter, section) => {
+const selectSection = async (chapter, section) => {
+    if (activeDocumentItem.value?.id === section.id) return;
+    await flushEditor();
     selectedChapterId.value = chapter.id;
     selectedSectionId.value = section.id;
 };
@@ -454,157 +474,119 @@ const activePresetInfo = computed(() => {
                 </div>
             </aside>
 
-            <!-- Center Column: Empty Editor Stage with Academic Styling -->
-            <main class="flex-1 overflow-y-auto p-6 flex flex-col items-center">
-                <!-- Academic Sheet Preview -->
-                <div
-                    class="w-full max-w-4xl min-h-[850px] bg-white shadow-sm border border-gray-200 rounded p-12 md:p-16 flex flex-col"
-                    style="font-family: 'Times New Roman', Times, serif; line-height: 1.5;"
-                >
-                    <!-- Active Chapter Selected View -->
-                    <div v-if="activeChapter" class="flex-1 flex flex-col">
-                        <!-- Chapter Header -->
-                        <div class="text-center mb-6">
-                            <h1 class="text-xl md:text-2xl font-bold uppercase tracking-wide text-gray-900">
+            <!-- Center Column: Tiptap Chapter Document Editor Stage -->
+            <main class="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col items-center">
+                <!-- If Active Chapter Selected -->
+                <div v-if="activeChapter && activeDocumentItem" class="w-full flex flex-col items-center">
+                    <!-- Chapter & Sub-sections Quick Switcher Pill Bar -->
+                    <div
+                        v-if="activeChapter.sections && activeChapter.sections.length > 0"
+                        class="w-full max-w-4xl mb-3 flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2 font-sans text-xs shadow-xs"
+                    >
+                        <div class="flex items-center space-x-1.5 overflow-x-auto py-0.5 max-w-[80%]">
+                            <span class="text-gray-400 font-semibold uppercase tracking-wider text-[10px] mr-1">Fokus:</span>
+                            <button
+                                type="button"
+                                class="rounded px-2.5 py-1 transition border text-xs whitespace-nowrap"
+                                :class="!selectedSectionId ? 'bg-indigo-600 text-white font-semibold border-indigo-600 shadow-xs' : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'"
+                                @click="selectChapter(activeChapter)"
+                            >
                                 {{ activeChapter.title }}
-                            </h1>
-                            <div v-if="activeSection" class="mt-2 text-base font-semibold text-indigo-800">
-                                {{ activeSection.title }}
-                            </div>
-                            <p class="text-xs text-gray-400 mt-1 font-sans">
-                                Standar Format: Times New Roman 12pt &bull; Spasi 1.5 &bull; Margin 4-4-3-3
-                            </p>
+                            </button>
+                            <button
+                                v-for="section in activeChapter.sections"
+                                :key="section.id"
+                                type="button"
+                                class="rounded px-2.5 py-1 transition border text-xs whitespace-nowrap"
+                                :class="selectedSectionId === section.id ? 'bg-indigo-600 text-white font-semibold border-indigo-600 shadow-xs' : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'"
+                                @click="selectSection(activeChapter, section)"
+                            >
+                                {{ section.title }}
+                            </button>
                         </div>
-
-                        <!-- Chapter Subsections Outline Preview -->
-                        <div
-                            v-if="activeChapter.sections && activeChapter.sections.length > 0"
-                            class="mb-6 p-4 rounded bg-slate-50 border border-slate-200 font-sans"
+                        <button
+                            type="button"
+                            class="text-indigo-600 hover:text-indigo-800 font-medium text-xs whitespace-nowrap ml-2"
+                            @click="openAddModal('section', activeChapter.id)"
                         >
-                            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                                Sub-bab dalam Bab Ini (Klik untuk fokus)
-                            </h4>
-                            <div class="flex flex-wrap gap-2 text-xs">
-                                <button
-                                    v-for="section in activeChapter.sections"
-                                    :key="section.id"
-                                    type="button"
-                                    class="rounded px-2.5 py-1 text-left transition border"
-                                    :class="selectedSectionId === section.id ? 'bg-indigo-100 border-indigo-400 text-indigo-900 font-semibold' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'"
-                                    @click="selectSection(activeChapter, section)"
-                                >
-                                    &bull; {{ section.title }}
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Empty Editor Stage Placeholder with Contextual Prompts -->
-                        <div class="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-lg p-6 text-center font-sans">
-                            <div class="rounded-full bg-indigo-50 p-3 text-indigo-600 mb-2">
-                                &#9998;
-                            </div>
-                            <h3 class="text-base font-semibold text-gray-900 mb-1">
-                                Lembar Kerja Siap Ditulis
-                            </h3>
-                            <p class="text-xs text-gray-500 max-w-md mb-6">
-                                Belum ada teks dalam draf ini. Mulai ketik draf tugas akhir atau ikuti panduan awal berikut.
-                            </p>
-
-                            <!-- Contextual Onboarding Guidance Cards inside Editor Stage -->
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-left w-full max-w-lg mb-6">
-                                <div class="rounded border border-gray-200 p-3 bg-slate-50">
-                                    <div class="font-semibold text-xs text-indigo-700 mb-0.5">1. Pilih Pedoman Kampus</div>
-                                    <p class="text-[11px] text-gray-600">Pilih preset universitas untuk memformat struktur Bab I - V.</p>
-                                </div>
-                                <div class="rounded border border-gray-200 p-3 bg-slate-50">
-                                    <div class="font-semibold text-xs text-indigo-700 mb-0.5">2. Susun Outline Bab</div>
-                                    <p class="text-[11px] text-gray-600">Sesuaikan judul bab atau sub-bab lewat panel outline di sebelah kiri.</p>
-                                </div>
-                                <div class="rounded border border-gray-200 p-3 bg-slate-50">
-                                    <div class="font-semibold text-xs text-indigo-700 mb-0.5">3. Research Library</div>
-                                    <p class="text-[11px] text-gray-600">Kumpulkan paper referensi untuk verifikasi sitasi.</p>
-                                </div>
-                                <div class="rounded border border-gray-200 p-3 bg-slate-50">
-                                    <div class="font-semibold text-xs text-indigo-700 mb-0.5">4. Cek Bukti Sitasi</div>
-                                    <p class="text-[11px] text-gray-600">Validasi klaim argumen terhadap paper ilmiah terunggah.</p>
-                                </div>
-                            </div>
-
-                            <div class="flex items-center space-x-2">
-                                <SecondaryButton class="text-xs" @click="openAddModal('section', activeChapter.id)">
-                                    + Tambah Sub-bab Baru
-                                </SecondaryButton>
-                                <PrimaryButton class="text-xs" @click="openEditModal(activeSection || activeChapter)">
-                                    Ubah Judul {{ activeSection ? 'Sub-bab' : 'Bab' }}
-                                </PrimaryButton>
-                            </div>
-                        </div>
+                            + Sub-bab
+                        </button>
                     </div>
 
-                    <!-- No Chapter / Project Contextual Onboarding Empty State -->
-                    <div v-else class="flex-1 flex flex-col justify-center items-center text-center font-sans py-8">
-                        <div class="max-w-xl">
-                            <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 mb-4 font-bold text-lg">
-                                N
-                            </div>
-                            <h2 class="text-2xl font-bold text-gray-900 mb-2">
-                                Proyek Skripsi: {{ project.title }}
-                            </h2>
-                            <p class="text-sm text-gray-600 mb-8">
-                                Mulai menyusun naskah tugas akhir dengan perlindungan isolasi proyek penuh, pedoman baku kampus, dan verifikasi bukti sitasi.
-                            </p>
+                    <!-- Tiptap Editor with debounced auto-save -->
+                    <ChapterEditor
+                        ref="editorRef"
+                        :project="project"
+                        :chapter="activeDocumentItem"
+                    />
+                </div>
 
-                            <!-- 4 Contextual Onboarding Prompt Cards -->
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-                                <div class="rounded-lg border border-gray-200 p-4 bg-slate-50 hover:bg-indigo-50/40 transition">
-                                    <div class="flex items-center space-x-2 font-semibold text-xs text-indigo-700 mb-1">
-                                        <span>1.</span>
-                                        <span>Pilih Pedoman Kampus</span>
-                                    </div>
-                                    <p class="text-xs text-gray-600">
-                                        Pilih preset universitas Anda (UI, UGM, ITB, Gunadarma, Universal) untuk memuat outline Bab I - V secara otomatis.
-                                    </p>
-                                </div>
+                <!-- No Chapter in Project: Contextual Onboarding Empty State -->
+                <div
+                    v-else
+                    class="w-full max-w-4xl min-h-[850px] bg-white shadow-sm border border-gray-200 rounded p-12 md:p-16 flex flex-col justify-center items-center text-center font-sans py-8"
+                >
+                    <div class="max-w-xl">
+                        <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 mb-4 font-bold text-lg">
+                            N
+                        </div>
+                        <h2 class="text-2xl font-bold text-gray-900 mb-2">
+                            Proyek Skripsi: {{ project.title }}
+                        </h2>
+                        <p class="text-sm text-gray-600 mb-8">
+                            Mulai menyusun naskah tugas akhir dengan perlindungan isolasi proyek penuh, pedoman baku kampus, dan verifikasi bukti sitasi.
+                        </p>
 
-                                <div class="rounded-lg border border-gray-200 p-4 bg-slate-50 hover:bg-indigo-50/40 transition">
-                                    <div class="flex items-center space-x-2 font-semibold text-xs text-indigo-700 mb-1">
-                                        <span>2.</span>
-                                        <span>Susun Struktur Outline</span>
-                                    </div>
-                                    <p class="text-xs text-gray-600">
-                                        Kustomisasi judul bab dan sub-bab sesuai arahan dosen pembimbing atau buku pedoman fakultas.
-                                    </p>
+                        <!-- 4 Contextual Onboarding Prompt Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                            <div class="rounded-lg border border-gray-200 p-4 bg-slate-50 hover:bg-indigo-50/40 transition cursor-pointer" @click="openPresetModal">
+                                <div class="flex items-center space-x-2 font-semibold text-xs text-indigo-700 mb-1">
+                                    <span>1.</span>
+                                    <span>Pilih Pedoman Kampus</span>
                                 </div>
-
-                                <div class="rounded-lg border border-gray-200 p-4 bg-slate-50 hover:bg-indigo-50/40 transition">
-                                    <div class="flex items-center space-x-2 font-semibold text-xs text-indigo-700 mb-1">
-                                        <span>3.</span>
-                                        <span>Unggah Paper Riset</span>
-                                    </div>
-                                    <p class="text-xs text-gray-600">
-                                        Kumpulkan jurnal dan dokumen PDF di Research Library untuk ekstraksi halaman dan rujukan kutipan.
-                                    </p>
-                                </div>
-
-                                <div class="rounded-lg border border-gray-200 p-4 bg-slate-50 hover:bg-indigo-50/40 transition">
-                                    <div class="flex items-center space-x-2 font-semibold text-xs text-indigo-700 mb-1">
-                                        <span>4.</span>
-                                        <span>Cek Bukti Sitasi</span>
-                                    </div>
-                                    <p class="text-xs text-gray-600">
-                                        Verifikasi klaim naskah dengan mesin hybrid search untuk mencegah teguran sitasi fiktif saat sidang skripsi.
-                                    </p>
-                                </div>
+                                <p class="text-xs text-gray-600">
+                                    Pilih preset universitas Anda (UI, UGM, ITB, Gunadarma, Universal) untuk memuat outline Bab I - V secara otomatis.
+                                </p>
                             </div>
 
-                            <div class="mt-8 flex justify-center space-x-3">
-                                <PrimaryButton @click="openPresetModal">
-                                    Terapkan Pedoman Kampus
-                                </PrimaryButton>
-                                <SecondaryButton @click="openAddModal('chapter')">
-                                    Buat Bab Baru
-                                </SecondaryButton>
+                            <div class="rounded-lg border border-gray-200 p-4 bg-slate-50 hover:bg-indigo-50/40 transition cursor-pointer" @click="openAddModal('chapter')">
+                                <div class="flex items-center space-x-2 font-semibold text-xs text-indigo-700 mb-1">
+                                    <span>2.</span>
+                                    <span>Susun Outline Bab</span>
+                                </div>
+                                <p class="text-xs text-gray-600">
+                                    Sesuaikan susunan bab atau tambah sub-bab baru sesuai panduan fakultas Anda.
+                                </p>
                             </div>
+
+                            <div class="rounded-lg border border-gray-200 p-4 bg-slate-50 hover:bg-indigo-50/40 transition cursor-pointer" @click="activeTab = 'library'">
+                                <div class="flex items-center space-x-2 font-semibold text-xs text-indigo-700 mb-1">
+                                    <span>3.</span>
+                                    <span>Research Library</span>
+                                </div>
+                                <p class="text-xs text-gray-600">
+                                    Unggah paper PDF dan kelola metadata sitasi untuk rujukan ilmiah.
+                                </p>
+                            </div>
+
+                            <div class="rounded-lg border border-gray-200 p-4 bg-slate-50 hover:bg-indigo-50/40 transition cursor-pointer" @click="activeTab = 'evidence'">
+                                <div class="flex items-center space-x-2 font-semibold text-xs text-indigo-700 mb-1">
+                                    <span>4.</span>
+                                    <span>Cek Bukti Sitasi</span>
+                                </div>
+                                <p class="text-xs text-gray-600">
+                                    Validasi klaim faktual argumen skripsi Anda terhadap paper riset terunggah.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 flex justify-center space-x-3">
+                            <PrimaryButton @click="openPresetModal">
+                                Terapkan Pedoman Kampus
+                            </PrimaryButton>
+                            <SecondaryButton @click="openAddModal('chapter')">
+                                Buat Bab Baru
+                            </SecondaryButton>
                         </div>
                     </div>
                 </div>

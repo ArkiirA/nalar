@@ -20,6 +20,18 @@ class Chapter extends Model
         'order',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'content' => 'array',
+        ];
+    }
+
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Chapter;
 use App\Models\Project;
 use App\Support\GuidelinePresets;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -41,19 +42,27 @@ class ChapterController extends Controller
     /**
      * Update the specified chapter or section.
      */
-    public function update(Request $request, Project $project, Chapter $chapter): RedirectResponse
+    public function update(Request $request, Project $project, Chapter $chapter): RedirectResponse|JsonResponse
     {
         Gate::authorize('update', $project);
 
         abort_if($chapter->project_id !== $project->id, 404);
 
-        $validated = $this->validateChapter($request, $project);
+        $validated = $this->validateChapter($request, $project, true);
 
         if (isset($validated['parent_id']) && $validated['parent_id'] === $chapter->id) {
             throw ValidationException::withMessages(['parent_id' => 'Item cannot be parented to itself.']);
         }
 
         $chapter->update($validated);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => 'Chapter saved successfully.',
+                'chapter' => $chapter->fresh(),
+                'saved_at' => now()->toIso8601String(),
+            ]);
+        }
 
         return back();
     }
@@ -131,10 +140,11 @@ class ChapterController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function validateChapter(Request $request, Project $project): array
+    private function validateChapter(Request $request, Project $project, bool $isUpdate = false): array
     {
         return $request->validate([
-            'title' => ['required', 'string', 'max:255'],
+            'title' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:255'],
+            'content' => ['nullable', 'array'],
             'parent_id' => [
                 'nullable',
                 Rule::exists('chapters', 'id')->where('project_id', $project->id),
