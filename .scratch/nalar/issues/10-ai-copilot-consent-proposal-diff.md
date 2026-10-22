@@ -4,11 +4,11 @@
 
 **Blocked by:** 03 (Chapter Document Tiptap Editor & Continuous Auto-save), 09 (Hybrid Retrieval Engine (Vector + Full-Text RRF))
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Explicit consent dialog must be accepted before any data is dispatched to external AI endpoints; student can revoke consent at any time.
-- [ ] Copilot interface toggles between Exploratory Mode (creative ideation) and Evidence-Based Mode (closed-library grounded).
-- [ ] Evidence-Based Mode strictly refuses to state facts not supported by retrieved candidate passages.
-- [ ] AI-suggested text revisions render in a side-by-side comparison drawer highlighting additions/deletions.
-- [ ] Clicking "Accept" replaces the selected chapter text in Tiptap; clicking "Reject" closes the drawer without modifying text.
-- [ ] Automated tests verify consent gate enforcement, mode prompt restrictions, and diff payload formatting.
+- [x] Explicit consent dialog must be accepted before any data is dispatched to external AI endpoints; student can revoke consent at any time.
+- [x] Copilot interface toggles between Exploratory Mode (creative ideation) and Evidence-Based Mode (closed-library grounded).
+- [x] Evidence-Based Mode strictly refuses to state facts not supported by retrieved candidate passages.
+- [x] AI-suggested text revisions render in a side-by-side comparison drawer highlighting additions/deletions.
+- [x] Clicking "Accept" replaces the selected chapter text in Tiptap; clicking "Reject" closes the drawer without modifying text.
+- [x] Automated tests verify consent gate enforcement, mode prompt restrictions, and diff payload formatting.

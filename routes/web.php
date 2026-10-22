@@ -47,6 +47,10 @@ Route::middleware('auth')->group(function () {
     Route::delete('/projects/{project}/references/{reference}', [\App\Http\Controllers\ReferenceController::class, 'destroy'])->name('projects.references.destroy')->scopeBindings();
     Route::patch('/projects/{project}/citation-style', [\App\Http\Controllers\ReferenceController::class, 'updateCitationStyle'])->name('projects.citation-style');
 
+    Route::post('/projects/{project}/ai/consent', [\App\Http\Controllers\AiCopilotController::class, 'updateConsent'])->name('projects.ai.consent');
+    Route::post('/projects/{project}/ai/chat', [\App\Http\Controllers\AiCopilotController::class, 'chat'])->name('projects.ai.chat');
+    Route::post('/projects/{project}/ai/proposal', [\App\Http\Controllers\AiCopilotController::class, 'proposal'])->name('projects.ai.proposal');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

@@ -8,6 +8,7 @@ import Modal from '@/Components/Modal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
+import ProposalDiffDrawer from '@/Components/ProposalDiffDrawer.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import axios from 'axios';
@@ -38,7 +39,170 @@ const props = defineProps({
 // Layout state
 const isOutlineOpen = ref(true);
 const isToolsOpen = ref(true);
-const activeTab = ref('guidelines'); // 'guidelines' | 'library' | 'evidence'
+const activeTab = ref('guidelines'); // 'guidelines' | 'library' | 'copilot' | 'evidence' | 'revisions'
+
+// AI Copilot & Consent State
+const projectAiConsent = ref(Boolean(props.project.ai_consent));
+const isConsentModalOpen = ref(false);
+const copilotMode = ref('evidence_based'); // 'evidence_based' | 'exploratory'
+const copilotMessages = ref([]);
+const copilotInput = ref('');
+const isCopilotLoading = ref(false);
+const isConsentSubmitting = ref(false);
+const copilotError = ref(null);
+const activeSelection = ref({ text: '', range: null });
+const proposalDiff = ref(null);
+const isProposalDiffOpen = ref(false);
+const isProposalLoading = ref(false);
+
+watch(
+    () => props.project.ai_consent,
+    (newVal) => {
+        projectAiConsent.value = Boolean(newVal);
+    }
+);
+
+const grantConsent = async () => {
+    isConsentSubmitting.value = true;
+    copilotError.value = null;
+    try {
+        await axios.post(route('projects.ai.consent', props.project.id), { consent: true });
+        projectAiConsent.value = true;
+        props.project.ai_consent = true;
+        isConsentModalOpen.value = false;
+    } catch (err) {
+        copilotError.value = err.response?.data?.message || 'Gagal menyimpan persetujuan AI.';
+    } finally {
+        isConsentSubmitting.value = false;
+    }
+};
+
+const revokeConsent = async () => {
+    if (!confirm('Apakah Anda yakin ingin mencabut izin pemrosesan AI eksternal? Pemrosesan AI akan segera dihentikan.')) {
+        return;
+    }
+    isConsentSubmitting.value = true;
+    copilotError.value = null;
+    try {
+        await axios.post(route('projects.ai.consent', props.project.id), { consent: false });
+        projectAiConsent.value = false;
+        props.project.ai_consent = false;
+    } catch (err) {
+        copilotError.value = err.response?.data?.message || 'Gagal mencabut persetujuan AI.';
+    } finally {
+        isConsentSubmitting.value = false;
+    }
+};
+
+const handleSelectionChange = ({ text, range }) => {
+    activeSelection.value = { text: text || '', range };
+};
+
+const handleRequestProposal = ({ text, range }) => {
+    activeSelection.value = { text: text || '', range };
+    if (!projectAiConsent.value) {
+        isConsentModalOpen.value = true;
+        return;
+    }
+    requestAiProposal();
+};
+
+const requestAiProposal = async (customInstruction = null) => {
+    const textToRevise = activeSelection.value.text || editorRef.value?.getSelectedText?.() || '';
+    if (!textToRevise.trim()) {
+        alert('Silakan sorot kalimat atau paragraf di editor yang ingin diusulkan perubahannya.');
+        return;
+    }
+
+    isProposalLoading.value = true;
+    isProposalDiffOpen.value = true;
+    copilotError.value = null;
+
+    try {
+        const res = await axios.post(route('projects.ai.proposal', props.project.id), {
+            selected_text: textToRevise,
+            instruction: customInstruction || 'Tingkatkan kualitas dan kejelasan bahasa akademis',
+            mode: copilotMode.value,
+        });
+        proposalDiff.value = res.data;
+    } catch (err) {
+        console.error('Failed to generate AI proposal:', err);
+        isProposalDiffOpen.value = false;
+        copilotError.value = err.response?.data?.message || 'Gagal menghasilkan usulan revisi teks.';
+        alert(copilotError.value);
+    } finally {
+        isProposalLoading.value = false;
+    }
+};
+
+const handleAcceptProposal = (proposedText) => {
+    if (editorRef.value?.replaceSelection) {
+        editorRef.value.replaceSelection(proposedText, activeSelection.value.range);
+    }
+    isProposalDiffOpen.value = false;
+    proposalDiff.value = null;
+    activeSelection.value = { text: '', range: null };
+};
+
+const handleRejectProposal = () => {
+    isProposalDiffOpen.value = false;
+    proposalDiff.value = null;
+    activeSelection.value = { text: '', range: null };
+};
+
+const sendCopilotMessage = async () => {
+    const msg = copilotInput.value.trim();
+    if (!msg || isCopilotLoading.value) return;
+
+    if (!projectAiConsent.value) {
+        alert('Persetujuan pemrosesan AI eksternal diperlukan sebelum dapat mengirim pesan.');
+        return;
+    }
+
+    const userMsg = {
+        id: Date.now(),
+        role: 'user',
+        content: msg,
+    };
+    copilotMessages.value.push(userMsg);
+    copilotInput.value = '';
+    isCopilotLoading.value = true;
+    copilotError.value = null;
+
+    try {
+        const historyPayload = copilotMessages.value.slice(-6).map((m) => ({
+            role: m.role,
+            content: m.content,
+        }));
+
+        const res = await axios.post(route('projects.ai.chat', props.project.id), {
+            message: msg,
+            mode: copilotMode.value,
+            history: historyPayload,
+            context_text: activeSelection.value.text || null,
+        });
+
+        copilotMessages.value.push({
+            id: Date.now() + 1,
+            role: 'assistant',
+            content: res.data.reply,
+            mode: res.data.mode,
+            warning: res.data.warning,
+            candidate_passages: res.data.candidate_passages || [],
+        });
+    } catch (err) {
+        console.error('Failed to chat with copilot:', err);
+        copilotError.value = err.response?.data?.message || 'Gagal menghubungi AI Copilot.';
+        copilotMessages.value.push({
+            id: Date.now() + 1,
+            role: 'assistant',
+            content: 'Maaf, terjadi kendala saat memproses: ' + copilotError.value,
+            error: true,
+        });
+    } finally {
+        isCopilotLoading.value = false;
+    }
+};
 
 // Active chapter & section selection
 const selectedChapterId = ref(props.chapters.length > 0 ? props.chapters[0].id : null);
@@ -1104,6 +1268,8 @@ const deleteReference = (refItem) => {
                         @open-revisions="openRevisionsDrawer"
                         @save-version="openSaveVersionModal"
                         @select-citation="handleSelectCitation"
+                        @selection-change="handleSelectionChange"
+                        @request-proposal="handleRequestProposal"
                     />
                 </div>
 
@@ -1201,6 +1367,14 @@ const deleteReference = (refItem) => {
                             @click="activeTab = 'library'"
                         >
                             Library
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded px-2 py-1 text-xs font-semibold transition"
+                            :class="activeTab === 'copilot' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-500 hover:text-gray-700'"
+                            @click="activeTab = 'copilot'"
+                        >
+                            Copilot
                         </button>
                         <button
                             type="button"
@@ -1736,6 +1910,190 @@ const deleteReference = (refItem) => {
                                     </div>
                                 </div>
                             </template>
+                        </div>
+                    </div>
+
+                    <!-- Tab: AI Copilot -->
+                    <div v-else-if="activeTab === 'copilot'" class="flex flex-col space-y-4">
+                        <!-- Case 1: Consent Required -->
+                        <div v-if="!projectAiConsent" class="rounded-lg border border-amber-200 bg-amber-50/50 p-5 space-y-3">
+                            <div class="flex items-center space-x-2 text-amber-800">
+                                <span class="text-base">🔒</span>
+                                <h4 class="font-bold text-xs uppercase tracking-wider">Persetujuan Pemrosesan AI</h4>
+                            </div>
+                            <p class="text-xs text-gray-700 leading-relaxed">
+                                Nalar memerlukan persetujuan eksplisit Anda sebelum data bab atau pertanyaan riset dikirimkan ke model eksternal (Google Gemini API).
+                            </p>
+                            <div class="space-y-1.5 text-[11px] text-gray-600 border-t border-amber-200/60 pt-2">
+                                <div class="flex items-start space-x-1.5">
+                                    <span class="text-emerald-600 font-bold">✓</span>
+                                    <span><strong>Kerahasiaan Akademis:</strong> Naskah Anda tidak digunakan untuk melatih model publik.</span>
+                                </div>
+                                <div class="flex items-start space-x-1.5">
+                                    <span class="text-emerald-600 font-bold">✓</span>
+                                    <span><strong>Mode Berbasis Bukti:</strong> AI hanya menggunakan passage terverifikasi dari Research Library Anda.</span>
+                                </div>
+                                <div class="flex items-start space-x-1.5">
+                                    <span class="text-emerald-600 font-bold">✓</span>
+                                    <span><strong>Dapat Dicabut Kapan Saja:</strong> Anda memegang kendali penuh atas privasi Chapter Document Anda.</span>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                data-testid="grant-ai-consent"
+                                class="w-full mt-2 rounded bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition shadow-xs disabled:opacity-50"
+                                :disabled="isConsentSubmitting"
+                                @click="grantConsent"
+                            >
+                                {{ isConsentSubmitting ? 'Memproses...' : 'Setujui & Aktifkan AI Copilot' }}
+                            </button>
+                        </div>
+
+                        <!-- Case 2: Consent Granted -->
+                        <div v-else class="flex flex-col space-y-3">
+                            <!-- Consent Status Bar & Mode Switcher -->
+                            <div class="rounded-lg border border-gray-200 bg-slate-50 p-3 space-y-2.5 shrink-0">
+                                <div class="flex items-center justify-between">
+                                    <span class="inline-flex items-center text-xs text-emerald-700 font-semibold">
+                                        <span class="h-2 w-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
+                                        AI Copilot Aktif
+                                    </span>
+                                    <button
+                                        type="button"
+                                        data-testid="revoke-ai-consent"
+                                        class="text-[11px] text-gray-400 hover:text-rose-600 transition"
+                                        :disabled="isConsentSubmitting"
+                                        @click="revokeConsent"
+                                    >
+                                        Cabut Izin
+                                    </button>
+                                </div>
+
+                                <!-- Mode Toggle -->
+                                <div class="flex rounded-md bg-gray-200/80 p-0.5 text-xs font-medium">
+                                    <button
+                                        type="button"
+                                        class="flex-1 py-1 text-center rounded transition"
+                                        :class="copilotMode === 'evidence_based' ? 'bg-white shadow-xs font-bold text-indigo-700' : 'text-gray-600 hover:text-gray-900'"
+                                        @click="copilotMode = 'evidence_based'"
+                                    >
+                                        Evidence-Based
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="flex-1 py-1 text-center rounded transition"
+                                        :class="copilotMode === 'exploratory' ? 'bg-white shadow-xs font-bold text-amber-700' : 'text-gray-600 hover:text-gray-900'"
+                                        @click="copilotMode = 'exploratory'"
+                                    >
+                                        Exploratory
+                                    </button>
+                                </div>
+
+                                <p class="text-[11px] text-gray-500 leading-tight">
+                                    <span v-if="copilotMode === 'evidence_based'" class="text-emerald-700">
+                                        <strong>Evidence-Based Mode:</strong> Menolak klaim tanpa dukungan dokumen Research Library.
+                                    </span>
+                                    <span v-else class="text-amber-700">
+                                        <strong>Exploratory Mode:</strong> Ideasi kreatif & kerangka bab. Butuh verifikasi mandiri.
+                                    </span>
+                                </p>
+                            </div>
+
+                            <!-- Selected Text Proposal Card (if text is selected in editor) -->
+                            <div v-if="activeSelection.text" class="rounded-lg border border-indigo-200 bg-indigo-50/50 p-2.5 space-y-1.5 shrink-0">
+                                <div class="flex items-center justify-between text-[11px] font-semibold text-indigo-900">
+                                    <span>Teks Terpilih ({{ activeSelection.text.length }} karakter)</span>
+                                    <button
+                                        type="button"
+                                        class="rounded bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-indigo-700 transition"
+                                        @click="requestAiProposal()"
+                                    >
+                                        Usul Revisi (Diff)
+                                    </button>
+                                </div>
+                                <p class="text-xs text-gray-700 italic line-clamp-2 bg-white/70 p-1.5 rounded border border-indigo-100">
+                                    "{{ activeSelection.text }}"
+                                </p>
+                            </div>
+
+                            <!-- Chat Message Stream -->
+                            <div class="space-y-3 pr-1 max-h-[380px] overflow-y-auto">
+                                <div v-if="copilotMessages.length === 0" class="flex flex-col items-center justify-center text-center p-4 text-xs text-gray-400">
+                                    <span class="text-2xl mb-1">💡</span>
+                                    <p class="font-medium text-gray-600">Mulai diskusi dengan Copilot</p>
+                                    <p class="text-[11px] text-gray-400 mt-1">
+                                        Tanyakan kerangka teori, evaluasi argumen, atau sorot teks di editor untuk usulan revisi.
+                                    </p>
+                                </div>
+
+                                <div
+                                    v-for="msg in copilotMessages"
+                                    :key="msg.id"
+                                    class="flex flex-col space-y-1"
+                                    :class="msg.role === 'user' ? 'items-end' : 'items-start'"
+                                >
+                                    <div
+                                        class="rounded-lg p-3 text-xs max-w-[92%] leading-relaxed"
+                                        :class="msg.role === 'user' ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-gray-100 text-gray-800 rounded-bl-none border border-gray-200'"
+                                    >
+                                        <p class="whitespace-pre-wrap">{{ msg.content }}</p>
+
+                                        <!-- Exploratory Mode Warning Notice -->
+                                        <div
+                                            v-if="msg.warning"
+                                            class="mt-2 rounded bg-amber-50 p-2 border border-amber-200 text-[11px] text-amber-800"
+                                        >
+                                            ⚠️ {{ msg.warning }}
+                                        </div>
+
+                                        <!-- Referenced Literature Passages -->
+                                        <div
+                                            v-if="msg.candidate_passages && msg.candidate_passages.length > 0"
+                                            class="mt-2 pt-2 border-t border-gray-200/80 space-y-1"
+                                        >
+                                            <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-700 block">
+                                                📚 Bukti Pendukung:
+                                            </span>
+                                            <div
+                                                v-for="(p, pIdx) in msg.candidate_passages"
+                                                :key="p.id || pIdx"
+                                                class="rounded bg-white/90 p-1.5 border border-gray-200 text-[10px] text-gray-700"
+                                            >
+                                                <div class="font-semibold text-indigo-800 flex justify-between">
+                                                    <span class="truncate">{{ p.document_title }}</span>
+                                                    <span>hlm. {{ p.page_number }}</span>
+                                                </div>
+                                                <p class="line-clamp-2 text-gray-600 mt-0.5">{{ p.content }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div v-if="isCopilotLoading" class="flex items-center space-x-2 text-xs text-gray-400 p-2">
+                                    <span class="animate-pulse">● ● ●</span>
+                                    <span>Copilot sedang memproses...</span>
+                                </div>
+                            </div>
+
+                            <!-- Chat Input Form -->
+                            <form @submit.prevent="sendCopilotMessage" class="shrink-0 pt-2 border-t border-gray-100 flex items-center space-x-2">
+                                <input
+                                    v-model="copilotInput"
+                                    type="text"
+                                    placeholder="Tanyakan sesuatu pada Copilot..."
+                                    class="flex-1 rounded-md border-gray-300 text-xs shadow-xs focus:border-indigo-500 focus:ring-indigo-500"
+                                    :disabled="isCopilotLoading"
+                                />
+                                <button
+                                    type="submit"
+                                    data-testid="send-copilot-btn"
+                                    class="rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition disabled:opacity-50"
+                                    :disabled="!copilotInput.trim() || isCopilotLoading"
+                                >
+                                    Kirim
+                                </button>
+                            </form>
                         </div>
                     </div>
 
@@ -2434,5 +2792,64 @@ const deleteReference = (refItem) => {
                 </form>
             </div>
         </Modal>
+
+        <!-- Explicit AI Processing Consent Modal Dialog -->
+        <Modal :show="isConsentModalOpen" @close="isConsentModalOpen = false">
+            <div class="p-6">
+                <div class="flex items-center space-x-3 mb-4">
+                    <span class="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 font-bold text-lg">
+                        🔒
+                    </span>
+                    <div>
+                        <h3 class="text-base font-bold text-gray-900">Persetujuan Pemrosesan AI Eksternal</h3>
+                        <p class="text-xs text-gray-500">Google Gemini API &bull; Nalar AI Copilot</p>
+                    </div>
+                </div>
+
+                <div class="space-y-3 text-xs text-gray-600 leading-relaxed">
+                    <p>
+                        Sebelum fitur AI Copilot dapat digunakan, Nalar memerlukan persetujuan eksplisit Anda untuk mengirimkan teks bab dan pertanyaan riset ke Google Gemini API.
+                    </p>
+                    <div class="rounded-lg bg-slate-50 border border-gray-200 p-3.5 space-y-2 text-[11px]">
+                        <div class="flex items-start space-x-2">
+                            <span class="text-emerald-600 font-bold">✓</span>
+                            <span><strong>Kerahasiaan Akademis:</strong> Naskah Anda tidak digunakan untuk melatih model publik.</span>
+                        </div>
+                        <div class="flex items-start space-x-2">
+                            <span class="text-emerald-600 font-bold">✓</span>
+                            <span><strong>Mode Berbasis Bukti:</strong> Jawaban dibatasi hanya pada candidate passage dari Research Library Anda.</span>
+                        </div>
+                        <div class="flex items-start space-x-2">
+                            <span class="text-emerald-600 font-bold">✓</span>
+                            <span><strong>Dapat Dicabut Kapan Saja:</strong> Anda dapat mencabut persetujuan sewaktu-waktu dan pemrosesan AI eksternal akan langsung dihentikan.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-4">
+                    <SecondaryButton type="button" @click="isConsentModalOpen = false">
+                        Batal
+                    </SecondaryButton>
+                    <PrimaryButton
+                        type="button"
+                        data-testid="confirm-ai-consent-btn"
+                        :disabled="isConsentSubmitting"
+                        @click="grantConsent"
+                    >
+                        {{ isConsentSubmitting ? 'Memproses...' : 'Setujui & Aktifkan AI Copilot' }}
+                    </PrimaryButton>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- Side-by-Side Proposal Diff Drawer -->
+        <ProposalDiffDrawer
+            :isOpen="isProposalDiffOpen"
+            :proposal="proposalDiff"
+            :loading="isProposalLoading"
+            @accept="handleAcceptProposal"
+            @reject="handleRejectProposal"
+            @close="handleRejectProposal"
+        />
     </AuthenticatedLayout>
 </template>

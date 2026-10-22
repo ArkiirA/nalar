@@ -29,7 +29,7 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['saved', 'status-change', 'open-revisions', 'save-version', 'select-citation']);
+const emit = defineEmits(['saved', 'status-change', 'open-revisions', 'save-version', 'select-citation', 'selection-change', 'request-proposal']);
 
 // Editor state
 const editor = ref(null);
@@ -39,6 +39,8 @@ const lastSavedTime = ref(null);
 const saveTimer = ref(null);
 const paperTheme = ref('white'); // 'white' | 'sepia'
 const isTableDropdownOpen = ref(false);
+const selectedText = ref('');
+const selectionRange = ref(null);
 
 // Citation autocomplete modal state
 const isCitationModalOpen = ref(false);
@@ -334,6 +336,20 @@ onMounted(() => {
         onUpdate: () => {
             queueAutoSave();
         },
+        onSelectionUpdate: ({ editor: ed }) => {
+            const { from, to } = ed.state.selection;
+            if (from !== to) {
+                selectedText.value = ed.state.doc.textBetween(from, to, ' ');
+                selectionRange.value = { from, to };
+            } else {
+                selectedText.value = '';
+                selectionRange.value = null;
+            }
+            emit('selection-change', {
+                text: selectedText.value,
+                range: selectionRange.value,
+            });
+        },
     });
 
     currentChapterId.value = props.chapter?.id;
@@ -396,11 +412,33 @@ const setContent = (newContent) => {
     }
 };
 
-// Expose flush and setContent methods to parent component
+// Programmatically replace selected text or range with new text
+const replaceSelection = (newText, range = null) => {
+    if (!editor.value) return;
+
+    if (range && typeof range.from === 'number' && typeof range.to === 'number') {
+        editor.value
+            .chain()
+            .focus()
+            .setTextSelection({ from: range.from, to: range.to })
+            .insertContent(newText)
+            .run();
+    } else {
+        editor.value.chain().focus().insertContent(newText).run();
+    }
+};
+
+const getSelectedText = () => selectedText.value;
+const getSelectionRange = () => selectionRange.value;
+
+// Expose methods to parent component
 defineExpose({
     flush,
     saveContent,
     setContent,
+    replaceSelection,
+    getSelectedText,
+    getSelectionRange,
 });
 
 // Formatting commands
@@ -660,6 +698,17 @@ const redo = () => editor.value?.chain().focus().redo().run();
                         >
                             <span class="font-bold text-indigo-600">@</span>
                             <span>Sitasi</span>
+                        </button>
+
+                        <!-- AI Writing Proposal Button -->
+                        <button
+                            type="button"
+                            title="Minta Usulan Revisi Teks AI"
+                            class="px-2 py-1 rounded transition border border-indigo-200 text-indigo-700 bg-indigo-50/60 hover:bg-indigo-100 inline-flex items-center space-x-1 font-medium"
+                            @click="emit('request-proposal', { text: selectedText, range: selectionRange })"
+                        >
+                            <span class="text-xs">✨</span>
+                            <span>Usulan AI</span>
                         </button>
                     </div>
                 </div>

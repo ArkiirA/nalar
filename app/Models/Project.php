@@ -19,6 +19,8 @@ class Project extends Model
         'guideline_preset',
         'guideline_profile',
         'citation_style',
+        'ai_consent',
+        'ai_consent_at',
     ];
 
     /**
@@ -31,7 +33,30 @@ class Project extends Model
         return [
             'target_completion_date' => 'date:Y-m-d',
             'guideline_profile' => 'array',
+            'ai_consent' => 'boolean',
+            'ai_consent_at' => 'datetime',
         ];
+    }
+
+    public function hasAiConsent(): bool
+    {
+        return (bool) $this->ai_consent;
+    }
+
+    public function grantAiConsent(): void
+    {
+        $this->update([
+            'ai_consent' => true,
+            'ai_consent_at' => now(),
+        ]);
+    }
+
+    public function revokeAiConsent(): void
+    {
+        $this->update([
+            'ai_consent' => false,
+            'ai_consent_at' => null,
+        ]);
     }
 
     public function isOwnedBy(User $user): bool
