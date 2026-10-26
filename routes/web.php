@@ -66,6 +66,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/projects/{project}/export/validate', [\App\Http\Controllers\ExportController::class, 'validateExport'])->name('projects.export.validate');
     Route::get('/projects/{project}/export/docx', [\App\Http\Controllers\ExportController::class, 'exportDocx'])->name('projects.export.docx');
+    Route::get('/projects/{project}/export/pdf', [\App\Http\Controllers\ExportController::class, 'exportPdf'])->name('projects.export.pdf');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

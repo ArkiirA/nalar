@@ -4,10 +4,10 @@
 
 **Blocked by:** 13 (Pre-Export Integrity Validator & DOCX Export)
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] Backend renders compiled HTML view representing the entire thesis with campus typography, spacing, and CSS paged media.
-- [ ] Headless Chromium generates PDF output with correct paper size (A4), margins (4-4-3-3cm), and page numbering.
-- [ ] Generates Table of Contents (Daftar Isi), List of Tables (Daftar Tabel), and List of Figures (Daftar Gambar).
-- [ ] Download endpoint streams final PDF to student with project-specific filename.
-- [ ] Automated tests verify PDF generation job execution, file existence, and response streaming.
+- [x] Backend renders compiled HTML view representing the entire thesis with campus typography, spacing, and CSS paged media.
+- [x] Headless Chromium generates PDF output with correct paper size (A4), margins (4-4-3-3cm), and page numbering.
+- [x] Generates Table of Contents (Daftar Isi), List of Tables (Daftar Tabel), and List of Figures (Daftar Gambar).
+- [x] Download endpoint streams final PDF to student with project-specific filename.
+- [x] Automated tests verify PDF generation job execution, file existence, and response streaming.

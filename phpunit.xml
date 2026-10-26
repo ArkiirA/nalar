@@ -32,5 +32,6 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="CHROMIUM_BINARY" value="/home/akira/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome"/>
     </php>
 </phpunit>

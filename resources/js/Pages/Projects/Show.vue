@@ -1226,15 +1226,15 @@ const deleteReference = (refItem) => {
                 </div>
 
                 <div class="flex items-center space-x-2">
-                    <!-- Pre-Export & Export DOCX Button -->
+                    <!-- Pre-Export & Export Button -->
                     <button
                         type="button"
                         class="inline-flex items-center rounded border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition shadow-2xs"
                         data-testid="open-export-modal-btn"
-                        title="Validasi Integritas Naskah & Ekspor DOCX"
+                        title="Validasi Integritas Naskah & Ekspor (DOCX / PDF)"
                         @click="openExportModal"
                     >
-                        <span class="mr-1">📄</span> Ekspor DOCX
+                        <span class="mr-1">📤</span> Ekspor Naskah
                     </button>
 
                     <!-- Supervision Notes Drawer Button -->
@@ -3375,12 +3375,21 @@ const deleteReference = (refItem) => {
                         </button>
                         <a
                             :href="route('projects.export.docx', project.id)"
-                            class="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 focus:outline-hidden transition"
+                            class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-gray-700 shadow-2xs hover:bg-gray-50 focus:outline-hidden transition"
                             data-testid="download-docx-btn"
                             target="_blank"
                             download
                         >
-                            <span>📥</span>&nbsp;Unduh DOCX
+                            <span>📄</span>&nbsp;Unduh DOCX
+                        </a>
+                        <a
+                            :href="route('projects.export.pdf', project.id)"
+                            class="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 focus:outline-hidden transition"
+                            data-testid="download-pdf-btn"
+                            target="_blank"
+                            download
+                        >
+                            <span>📕</span>&nbsp;Unduh PDF
                         </a>
                     </div>
                 </div>

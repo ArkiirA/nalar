@@ -40,4 +40,8 @@ return [
         'embedding_model' => env('GEMINI_EMBEDDING_MODEL', 'text-embedding-004'),
     ],
 
+    'chromium' => [
+        'binary' => env('CHROMIUM_BINARY'),
+    ],
+
 ];
