@@ -67,6 +67,30 @@ const isEvidenceLoading = ref(false);
 const activeAssessment = ref(null);
 const evidenceError = ref(null);
 
+// Pre-Export Integrity Validator & DOCX Export State
+const isExportModalOpen = ref(false);
+const isExportValidating = ref(false);
+const exportValidationReport = ref(null);
+const exportValidationError = ref(null);
+
+const openExportModal = async () => {
+    isExportModalOpen.value = true;
+    isExportValidating.value = true;
+    exportValidationError.value = null;
+    try {
+        const res = await axios.get(route('projects.export.validate', props.project.id));
+        exportValidationReport.value = res.data;
+    } catch (err) {
+        exportValidationError.value = err.response?.data?.message || 'Gagal memvalidasi integritas naskah.';
+    } finally {
+        isExportValidating.value = false;
+    }
+};
+
+const closeExportModal = () => {
+    isExportModalOpen.value = false;
+};
+
 // Supervision Notes State
 const localSupervisionNotes = ref([...(props.supervisionNotes || [])]);
 const isSupervisionDrawerOpen = ref(false);
@@ -1202,6 +1226,17 @@ const deleteReference = (refItem) => {
                 </div>
 
                 <div class="flex items-center space-x-2">
+                    <!-- Pre-Export & Export DOCX Button -->
+                    <button
+                        type="button"
+                        class="inline-flex items-center rounded border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition shadow-2xs"
+                        data-testid="open-export-modal-btn"
+                        title="Validasi Integritas Naskah & Ekspor DOCX"
+                        @click="openExportModal"
+                    >
+                        <span class="mr-1">📄</span> Ekspor DOCX
+                    </button>
+
                     <!-- Supervision Notes Drawer Button -->
                     <button
                         type="button"
@@ -3182,6 +3217,172 @@ const deleteReference = (refItem) => {
                     >
                         {{ isConsentSubmitting ? 'Memproses...' : 'Setujui & Aktifkan AI Copilot' }}
                     </PrimaryButton>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- Pre-Export Integrity Validation & DOCX Export Modal -->
+        <Modal :show="isExportModalOpen" @close="closeExportModal" max-width="2xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between pb-4 border-b border-gray-100">
+                    <div>
+                        <h3 class="text-base font-bold text-gray-900 flex items-center gap-2">
+                            <span>📄</span> Validasi Integritas & Ekspor DOCX
+                        </h3>
+                        <p class="text-xs text-gray-500 mt-0.5">
+                            Pemeriksaan otomatis kelengkapan bab, konsistensi sitasi, dan kompilasi naskah skripsi.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                        @click="closeExportModal"
+                    >
+                        &times;
+                    </button>
+                </div>
+
+                <!-- Loading State -->
+                <div v-if="isExportValidating" class="py-12 text-center text-gray-500">
+                    <div class="inline-block animate-spin text-2xl mb-2">⏳</div>
+                    <p class="text-xs font-medium">Memindai seluruh bab dan daftar referensi...</p>
+                </div>
+
+                <!-- Error State -->
+                <div v-else-if="exportValidationError" class="py-6 text-center text-rose-600 text-xs">
+                    <p>{{ exportValidationError }}</p>
+                    <button
+                        type="button"
+                        class="mt-3 text-indigo-600 underline text-xs font-semibold"
+                        @click="openExportModal"
+                    >
+                        Coba lagi
+                    </button>
+                </div>
+
+                <!-- Report Content -->
+                <div v-else-if="exportValidationReport" class="py-4 space-y-4">
+                    <!-- Banner Status -->
+                    <div
+                        v-if="exportValidationReport.is_valid"
+                        class="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-emerald-800 text-xs flex items-start gap-2.5"
+                        data-testid="export-valid-banner"
+                    >
+                        <span class="text-base leading-none">✓</span>
+                        <div>
+                            <div class="font-bold">Integritas Naskah Lengkap</div>
+                            <div class="text-[11px] text-emerald-700 mt-0.5">
+                                Seluruh bab memiliki isi teks dan seluruh referensi Research Library telah disitasi secara konsisten. Naskah siap dikompilasi ke format DOCX.
+                            </div>
+                        </div>
+                    </div>
+                    <div
+                        v-else
+                        class="rounded-lg bg-amber-50 border border-amber-200 p-3 text-amber-900 text-xs flex items-start gap-2.5"
+                        data-testid="export-warning-banner"
+                    >
+                        <span class="text-base leading-none">⚠</span>
+                        <div>
+                            <div class="font-bold">
+                                Ditemukan {{ exportValidationReport.summary?.total_warnings_count || 0 }} Catatan Integritas
+                            </div>
+                            <div class="text-[11px] text-amber-800 mt-0.5">
+                                Tinjau catatan di bawah sebelum mengekspor. Tombol unduh DOCX tetap dapat diakses bila Anda ingin mengekspor naskah saat ini.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Warnings Breakdown -->
+                    <div class="max-h-72 overflow-y-auto space-y-3 pr-1 text-xs">
+                        <!-- Empty Chapters -->
+                        <div
+                            v-if="exportValidationReport.empty_chapters?.length > 0"
+                            class="rounded border border-amber-200 bg-white p-3 space-y-1.5"
+                            data-testid="warning-empty-chapters"
+                        >
+                            <div class="font-bold text-amber-900 flex items-center justify-between">
+                                <span>Bab / Seksi Belum Berisi ({{ exportValidationReport.empty_chapters.length }})</span>
+                                <span class="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-mono">Peringatan</span>
+                            </div>
+                            <ul class="list-disc list-inside space-y-1 text-gray-700 text-[11px]">
+                                <li v-for="ec in exportValidationReport.empty_chapters" :key="ec.id">
+                                    <span class="font-semibold">{{ ec.title }}</span> masih kosong atau belum memiliki teks.
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Uncited References -->
+                        <div
+                            v-if="exportValidationReport.uncited_references?.length > 0"
+                            class="rounded border border-amber-200 bg-white p-3 space-y-1.5"
+                            data-testid="warning-uncited-references"
+                        >
+                            <div class="font-bold text-amber-900 flex items-center justify-between">
+                                <span>Referensi Belum Disitasi ({{ exportValidationReport.uncited_references.length }})</span>
+                                <span class="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-mono">Peringatan</span>
+                            </div>
+                            <ul class="list-disc list-inside space-y-1 text-gray-700 text-[11px]">
+                                <li v-for="ur in exportValidationReport.uncited_references" :key="ur.id">
+                                    <span class="font-semibold">{{ ur.title }}</span> ({{ ur.year || 'n.d.' }}) terdaftar di Research Library tetapi belum disitasi di teks bab.
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Invalid Citations -->
+                        <div
+                            v-if="exportValidationReport.invalid_citations?.length > 0"
+                            class="rounded border border-rose-200 bg-white p-3 space-y-1.5"
+                            data-testid="warning-invalid-citations"
+                        >
+                            <div class="font-bold text-rose-900 flex items-center justify-between">
+                                <span>Sitasi Tidak Valid ({{ exportValidationReport.invalid_citations.length }})</span>
+                                <span class="text-[10px] bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded font-mono">Perhatian</span>
+                            </div>
+                            <ul class="list-disc list-inside space-y-1 text-gray-700 text-[11px]">
+                                <li v-for="(ic, idx) in exportValidationReport.invalid_citations" :key="idx">
+                                    Pada <span class="font-semibold">{{ ic.chapter_title }}</span>: referensi ID {{ ic.reference_id ?? 'tidak terpasang' }} tidak ditemukan di Research Library.
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Formatting Specifications Note -->
+                    <div class="rounded-lg bg-gray-50 border border-gray-200 p-2.5 text-[11px] text-gray-600 flex items-center justify-between">
+                        <div class="space-x-2">
+                            <span class="font-semibold text-gray-800">Spesifikasi Format:</span>
+                            <span>Times New Roman 12pt</span> &bull;
+                            <span>Spasi 1.5</span> &bull;
+                            <span>Margin 4-4-3-3 cm</span> &bull;
+                            <span>Daftar Pustaka ({{ project.citation_style?.toUpperCase() || 'APA 7TH' }})</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="mt-5 flex items-center justify-between border-t border-gray-100 pt-4">
+                    <SecondaryButton type="button" @click="closeExportModal">
+                        Tutup
+                    </SecondaryButton>
+
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-2xs hover:bg-gray-50 transition"
+                            :disabled="isExportValidating"
+                            @click="openExportModal"
+                        >
+                            🔄 Pindai Ulang
+                        </button>
+                        <a
+                            :href="route('projects.export.docx', project.id)"
+                            class="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 focus:outline-hidden transition"
+                            data-testid="download-docx-btn"
+                            target="_blank"
+                            download
+                        >
+                            <span>📥</span>&nbsp;Unduh DOCX
+                        </a>
+                    </div>
                 </div>
             </div>
         </Modal>

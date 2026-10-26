@@ -64,6 +64,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/projects/{project}/supervision-tasks/{task}/toggle', [\App\Http\Controllers\SupervisionNoteController::class, 'toggleTask'])->name('projects.supervision-tasks.toggle')->scopeBindings();
     Route::delete('/projects/{project}/supervision-tasks/{task}', [\App\Http\Controllers\SupervisionNoteController::class, 'destroyTask'])->name('projects.supervision-tasks.destroy')->scopeBindings();
 
+    Route::get('/projects/{project}/export/validate', [\App\Http\Controllers\ExportController::class, 'validateExport'])->name('projects.export.validate');
+    Route::get('/projects/{project}/export/docx', [\App\Http\Controllers\ExportController::class, 'exportDocx'])->name('projects.export.docx');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
