@@ -4,10 +4,10 @@
 
 **Blocked by:** 03 (Chapter Document Tiptap Editor & Continuous Auto-save)
 
-**Status:** ready-for-agent
+Status: ready-for-human
 
-- [ ] File upload endpoint accepts DOCX and PDF thesis drafts up to 50MB.
-- [ ] Parser splits content at recognized chapter headers into candidate chapter records.
-- [ ] Interactive modal displays candidate chapter titles and preview text, allowing manual corrections.
-- [ ] On confirmation, creates Chapter Documents and updates the project outline without overwriting unselected items.
-- [ ] Automated tests verify heading detection patterns, candidate split integrity, and document creation.
+- [x] File upload endpoint accepts DOCX and PDF thesis drafts up to 50MB.
+- [x] Parser splits content at recognized chapter headers into candidate chapter records.
+- [x] Interactive modal displays candidate chapter titles and preview text, allowing manual corrections.
+- [x] On confirmation, creates Chapter Documents and updates the project outline without overwriting unselected items.
+- [x] Automated tests verify heading detection patterns, candidate split integrity, and document creation.

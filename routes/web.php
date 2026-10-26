@@ -68,6 +68,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/projects/{project}/export/docx', [\App\Http\Controllers\ExportController::class, 'exportDocx'])->name('projects.export.docx');
     Route::get('/projects/{project}/export/pdf', [\App\Http\Controllers\ExportController::class, 'exportPdf'])->name('projects.export.pdf');
 
+    Route::post('/projects/{project}/import/parse', [\App\Http\Controllers\ThesisImportController::class, 'parse'])->name('projects.import.parse');
+    Route::post('/projects/{project}/import/confirm', [\App\Http\Controllers\ThesisImportController::class, 'confirm'])->name('projects.import.confirm');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

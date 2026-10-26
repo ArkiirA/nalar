@@ -11,6 +11,7 @@ import TextInput from '@/Components/TextInput.vue';
 import ProposalDiffDrawer from '@/Components/ProposalDiffDrawer.vue';
 import EvidenceAssessmentDrawer from '@/Components/EvidenceAssessmentDrawer.vue';
 import SupervisionNotesDrawer from '@/Components/SupervisionNotesDrawer.vue';
+import ThesisImportModal from '@/Components/ThesisImportModal.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import axios from 'axios';
@@ -89,6 +90,19 @@ const openExportModal = async () => {
 
 const closeExportModal = () => {
     isExportModalOpen.value = false;
+};
+
+// Existing Thesis Importer State
+const isImportModalOpen = ref(false);
+const openImportModal = () => {
+    isImportModalOpen.value = true;
+};
+const closeImportModal = () => {
+    isImportModalOpen.value = false;
+};
+const onDraftImported = (imported) => {
+    isImportModalOpen.value = false;
+    router.reload({ only: ['chapters'] });
 };
 
 // Supervision Notes State
@@ -1226,6 +1240,17 @@ const deleteReference = (refItem) => {
                 </div>
 
                 <div class="flex items-center space-x-2">
+                    <!-- Thesis Importer Button -->
+                    <button
+                        type="button"
+                        class="inline-flex items-center rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition shadow-2xs"
+                        data-testid="open-import-modal-btn"
+                        title="Impor Draf Skripsi (DOCX / PDF)"
+                        @click="openImportModal"
+                    >
+                        <span class="mr-1">📥</span> Impor Draf
+                    </button>
+
                     <!-- Pre-Export & Export Button -->
                     <button
                         type="button"
@@ -1310,13 +1335,23 @@ const deleteReference = (refItem) => {
                         >
                             &bull; {{ activePresetInfo?.short_name || 'Ganti Pedoman' }}
                         </button>
-                        <button
-                            type="button"
-                            class="inline-flex items-center rounded bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
-                            @click="openAddModal('chapter')"
-                        >
-                            + Tambah Bab
-                        </button>
+                        <div class="flex items-center space-x-1">
+                            <button
+                                type="button"
+                                class="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-xs font-semibold text-gray-700 hover:bg-gray-200"
+                                title="Impor Draf Skripsi (DOCX / PDF)"
+                                @click="openImportModal"
+                            >
+                                📥 Impor
+                            </button>
+                            <button
+                                type="button"
+                                class="inline-flex items-center rounded bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                                @click="openAddModal('chapter')"
+                            >
+                                + Tambah Bab
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Chapters Empty State -->
@@ -3423,6 +3458,14 @@ const deleteReference = (refItem) => {
             @update:notes="localSupervisionNotes = $event"
             @task-toggled="({ task }) => handleToggleSupervisionTask(task)"
             @close="isSupervisionDrawerOpen = false"
+        />
+
+        <!-- Thesis Draft Importer Modal -->
+        <ThesisImportModal
+            :show="isImportModalOpen"
+            :project="project"
+            @close="closeImportModal"
+            @imported="onDraftImported"
         />
     </AuthenticatedLayout>
 </template>
