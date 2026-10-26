@@ -10,6 +10,7 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import ProposalDiffDrawer from '@/Components/ProposalDiffDrawer.vue';
 import EvidenceAssessmentDrawer from '@/Components/EvidenceAssessmentDrawer.vue';
+import SupervisionNotesDrawer from '@/Components/SupervisionNotesDrawer.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import axios from 'axios';
@@ -32,6 +33,10 @@ const props = defineProps({
         default: () => [],
     },
     references: {
+        type: Array,
+        default: () => [],
+    },
+    supervisionNotes: {
         type: Array,
         default: () => [],
     },
@@ -61,6 +66,106 @@ const isEvidenceDrawerOpen = ref(false);
 const isEvidenceLoading = ref(false);
 const activeAssessment = ref(null);
 const evidenceError = ref(null);
+
+// Supervision Notes State
+const localSupervisionNotes = ref([...(props.supervisionNotes || [])]);
+const isSupervisionDrawerOpen = ref(false);
+
+watch(
+    () => props.supervisionNotes,
+    (newVal) => {
+        localSupervisionNotes.value = [...(newVal || [])];
+    }
+);
+
+const openSupervisionDrawer = () => {
+    isSupervisionDrawerOpen.value = true;
+};
+
+const totalPendingSupervisionTasksCount = computed(() => {
+    let count = 0;
+    localSupervisionNotes.value.forEach((n) => {
+        (n.tasks || []).forEach((t) => {
+            if (!t.is_completed) count++;
+        });
+    });
+    return count;
+});
+
+const activeChapterSupervisionTasks = computed(() => {
+    if (!activeChapter.value) return [];
+    const currentChapterId = activeChapter.value.id;
+    const sectionIds = (activeChapter.value.sections || []).map((s) => s.id);
+    const matchingIds = selectedSectionId.value
+        ? [selectedSectionId.value, currentChapterId]
+        : [currentChapterId, ...sectionIds];
+
+    const list = [];
+    localSupervisionNotes.value.forEach((note) => {
+        (note.tasks || []).forEach((task) => {
+            if (matchingIds.includes(task.chapter_id)) {
+                list.push({
+                    ...task,
+                    advisor_name: note.advisor_name,
+                    meeting_date: note.meeting_date,
+                    note_id: note.id,
+                });
+            }
+        });
+    });
+    return list;
+});
+
+const activeChapterPendingSupervisionTasksCount = computed(() => {
+    return activeChapterSupervisionTasks.value.filter((t) => !t.is_completed).length;
+});
+
+const handleToggleSupervisionTask = async (task) => {
+    const previous = task.is_completed;
+    const nextState = !previous;
+
+    // Optimistic update
+    localSupervisionNotes.value = localSupervisionNotes.value.map((n) => ({
+        ...n,
+        tasks: (n.tasks || []).map((t) => {
+            if (t.id === task.id) {
+                return {
+                    ...t,
+                    is_completed: nextState,
+                    completed: nextState,
+                    completed_at: nextState ? new Date().toISOString() : null,
+                };
+            }
+            return t;
+        }),
+    }));
+
+    try {
+        const res = await axios.post(route('projects.supervision-tasks.toggle', [props.project.id, task.id]));
+        if (res.data?.task) {
+            localSupervisionNotes.value = localSupervisionNotes.value.map((n) => ({
+                ...n,
+                tasks: (n.tasks || []).map((t) => (t.id === task.id ? { ...t, ...res.data.task } : t)),
+            }));
+        }
+    } catch (err) {
+        console.error('Failed to toggle supervision task:', err);
+        // Revert on error
+        localSupervisionNotes.value = localSupervisionNotes.value.map((n) => ({
+            ...n,
+            tasks: (n.tasks || []).map((t) => {
+                if (t.id === task.id) {
+                    return {
+                        ...t,
+                        is_completed: previous,
+                        completed: previous,
+                    };
+                }
+                return t;
+            }),
+        }));
+    }
+};
 
 const handleCheckEvidence = async ({ text, range }) => {
     activeSelection.value = { text: text || '', range };
@@ -1097,6 +1202,23 @@ const deleteReference = (refItem) => {
                 </div>
 
                 <div class="flex items-center space-x-2">
+                    <!-- Supervision Notes Drawer Button -->
+                    <button
+                        type="button"
+                        class="inline-flex items-center rounded border px-2.5 py-1 text-xs font-medium transition"
+                        :class="isSupervisionDrawerOpen ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'"
+                        title="Buka Catatan Bimbingan & Checklist Revisi"
+                        @click="openSupervisionDrawer"
+                    >
+                        <span class="mr-1">📋</span> Bimbingan
+                        <span
+                            v-if="totalPendingSupervisionTasksCount > 0"
+                            class="ml-1.5 px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-bold"
+                        >
+                            {{ totalPendingSupervisionTasksCount }}
+                        </span>
+                    </button>
+
                     <!-- Toggle Outline -->
                     <button
                         type="button"
@@ -1352,6 +1474,58 @@ const deleteReference = (refItem) => {
                         </button>
                     </div>
 
+                    <!-- Contextual Helper Bar: Supervision Tasks for active chapter -->
+                    <div
+                        v-if="activeChapterSupervisionTasks.length > 0"
+                        class="w-full max-w-4xl mb-3 rounded-lg border border-amber-200 bg-amber-50/80 p-3 shadow-xs font-sans text-xs"
+                        data-testid="supervision-contextual-helper-bar"
+                    >
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center space-x-2">
+                                <span class="flex h-5 w-5 items-center justify-center rounded-full bg-amber-200 text-amber-800 font-bold text-[11px]">
+                                    📋
+                                </span>
+                                <span class="font-bold text-amber-900">
+                                    Catatan Revisi Pembimbing ({{ activeChapterPendingSupervisionTasksCount }} pending / {{ activeChapterSupervisionTasks.length }} tugas)
+                                </span>
+                            </div>
+                            <button
+                                type="button"
+                                class="text-amber-800 hover:text-amber-950 font-semibold underline text-[11px] transition"
+                                @click="openSupervisionDrawer"
+                            >
+                                Buka Catatan Bimbingan &raquo;
+                            </button>
+                        </div>
+                        <div class="space-y-1.5">
+                            <div
+                                v-for="task in activeChapterSupervisionTasks"
+                                :key="task.id"
+                                class="flex items-center justify-between rounded border px-2.5 py-1.5 transition"
+                                :class="task.is_completed ? 'bg-amber-50/40 border-amber-100 opacity-75' : 'bg-white/90 border-amber-200/60 hover:bg-white'"
+                            >
+                                <label class="flex items-center space-x-2.5 cursor-pointer flex-1 mr-2">
+                                    <input
+                                        type="checkbox"
+                                        :checked="task.is_completed"
+                                        data-testid="supervision-helper-task-checkbox"
+                                        class="rounded border-amber-300 text-amber-600 focus:ring-amber-500 h-4 w-4"
+                                        @change="handleToggleSupervisionTask(task)"
+                                    />
+                                    <span
+                                        class="font-medium"
+                                        :class="task.is_completed ? 'line-through text-gray-400' : 'text-gray-800'"
+                                    >
+                                        {{ task.title }}
+                                    </span>
+                                </label>
+                                <span class="text-[10px] text-amber-800 bg-amber-100/70 px-1.5 py-0.5 rounded font-medium shrink-0">
+                                    {{ task.advisor_name }} &bull; {{ task.meeting_date }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Tiptap Editor with debounced auto-save -->
                     <ChapterEditor
                         ref="editorRef"
@@ -1486,6 +1660,14 @@ const deleteReference = (refItem) => {
                             @click="openRevisionsDrawer"
                         >
                             Revisi
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded px-2 py-1 text-xs font-semibold transition"
+                            :class="isSupervisionDrawerOpen ? 'bg-amber-100 text-amber-900' : 'text-gray-500 hover:text-gray-700'"
+                            @click="openSupervisionDrawer"
+                        >
+                            Bimbingan
                         </button>
                     </div>
 
@@ -3020,6 +3202,17 @@ const deleteReference = (refItem) => {
             :assessment="activeAssessment"
             :loading="isEvidenceLoading"
             @close="isEvidenceDrawerOpen = false"
+        />
+
+        <!-- Supervision Notes & Action Checklist Drawer -->
+        <SupervisionNotesDrawer
+            :isOpen="isSupervisionDrawerOpen"
+            :project="project"
+            :chapters="chapters"
+            :notes="localSupervisionNotes"
+            @update:notes="localSupervisionNotes = $event"
+            @task-toggled="({ task }) => handleToggleSupervisionTask(task)"
+            @close="isSupervisionDrawerOpen = false"
         />
     </AuthenticatedLayout>
 </template>

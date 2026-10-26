@@ -4,10 +4,10 @@
 
 **Blocked by:** 03 (Chapter Document Tiptap Editor & Continuous Auto-save)
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Student can create supervision meeting logs with meeting date, advisor name, and discussion notes.
-- [ ] Student can add actionable checklist tasks to a meeting log and link each task to a specific chapter in the outline.
-- [ ] Active chapter view displays associated pending supervision tasks in a contextual helper bar.
-- [ ] Toggling a task updates its completion status in real time.
-- [ ] Automated tests verify supervision note CRUD, chapter linking, and project-scoped authorization.
+- [x] Student can create supervision meeting logs with meeting date, advisor name, and discussion notes.
+- [x] Student can add actionable checklist tasks to a meeting log and link each task to a specific chapter in the outline.
+- [x] Active chapter view displays associated pending supervision tasks in a contextual helper bar.
+- [x] Toggling a task updates its completion status in real time.
+- [x] Automated tests verify supervision note CRUD, chapter linking, and project-scoped authorization.

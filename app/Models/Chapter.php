@@ -55,6 +55,16 @@ class Chapter extends Model
         return $this->hasMany(ChapterRevision::class)->orderByDesc('created_at')->orderByDesc('id');
     }
 
+    public function supervisionTasks(): HasMany
+    {
+        return $this->hasMany(SupervisionTask::class);
+    }
+
+    public function pendingSupervisionTasks(): HasMany
+    {
+        return $this->hasMany(SupervisionTask::class)->where('is_completed', false);
+    }
+
     /**
      * Record a snapshot revision for this chapter.
      */

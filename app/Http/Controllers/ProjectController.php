@@ -67,6 +67,7 @@ class ProjectController extends Controller
                     'missing_field_warnings' => $ref->getMissingFieldWarnings(),
                 ]);
             }),
+            'supervisionNotes' => $project->supervisionNotes()->with(['tasks.chapter'])->get(),
         ]);
     }
 

@@ -54,6 +54,16 @@ Route::middleware('auth')->group(function () {
     Route::post('/projects/{project}/evidence/check', [\App\Http\Controllers\EvidenceCheckerController::class, 'check'])->name('projects.evidence.check');
     Route::get('/projects/{project}/evidence/claims/{claim}', [\App\Http\Controllers\EvidenceCheckerController::class, 'show'])->name('projects.evidence.show')->scopeBindings();
 
+    Route::get('/projects/{project}/supervision-notes', [\App\Http\Controllers\SupervisionNoteController::class, 'index'])->name('projects.supervision-notes.index');
+    Route::post('/projects/{project}/supervision-notes', [\App\Http\Controllers\SupervisionNoteController::class, 'store'])->name('projects.supervision-notes.store');
+    Route::patch('/projects/{project}/supervision-notes/{supervision_note}', [\App\Http\Controllers\SupervisionNoteController::class, 'update'])->name('projects.supervision-notes.update')->scopeBindings();
+    Route::delete('/projects/{project}/supervision-notes/{supervision_note}', [\App\Http\Controllers\SupervisionNoteController::class, 'destroy'])->name('projects.supervision-notes.destroy')->scopeBindings();
+
+    Route::post('/projects/{project}/supervision-notes/{supervision_note}/tasks', [\App\Http\Controllers\SupervisionNoteController::class, 'storeTask'])->name('projects.supervision-notes.tasks.store')->scopeBindings();
+    Route::patch('/projects/{project}/supervision-tasks/{task}', [\App\Http\Controllers\SupervisionNoteController::class, 'updateTask'])->name('projects.supervision-tasks.update')->scopeBindings();
+    Route::post('/projects/{project}/supervision-tasks/{task}/toggle', [\App\Http\Controllers\SupervisionNoteController::class, 'toggleTask'])->name('projects.supervision-tasks.toggle')->scopeBindings();
+    Route::delete('/projects/{project}/supervision-tasks/{task}', [\App\Http\Controllers\SupervisionNoteController::class, 'destroyTask'])->name('projects.supervision-tasks.destroy')->scopeBindings();
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

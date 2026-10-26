@@ -119,6 +119,21 @@ class Project extends Model
         return $this->hasMany(EvidenceAssessment::class)->latest();
     }
 
+    public function supervisionNotes(): HasMany
+    {
+        return $this->hasMany(SupervisionNote::class)->orderByDesc('meeting_date')->orderByDesc('id');
+    }
+
+    public function supervisionTasks(): HasMany
+    {
+        return $this->hasMany(SupervisionTask::class);
+    }
+
+    public function tasks(): HasMany
+    {
+        return $this->supervisionTasks();
+    }
+
     /**
      * Apply a guideline preset to the project and populate default chapters and sections.
      */

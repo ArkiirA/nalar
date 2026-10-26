@@ -56,6 +56,22 @@ test('deleting a project cascades and wipes all associated child records', funct
     expect(\App\Models\Claim::where('project_id', $project->id)->count())->toBe(1);
     expect(\App\Models\EvidenceAssessment::where('project_id', $project->id)->count())->toBe(1);
 
+    $supervisionNote = \App\Models\SupervisionNote::create([
+        'project_id' => $project->id,
+        'meeting_date' => '2026-10-25',
+        'advisor_name' => 'Prof. Dr. Bambang',
+        'notes' => 'Catatan bimbingan cascade test',
+    ]);
+    $supervisionTask = \App\Models\SupervisionTask::create([
+        'project_id' => $project->id,
+        'supervision_note_id' => $supervisionNote->id,
+        'chapter_id' => $chapter1->id,
+        'title' => 'Revisi rumusan masalah',
+        'is_completed' => false,
+    ]);
+    expect(\App\Models\SupervisionNote::where('project_id', $project->id)->count())->toBe(1);
+    expect(\App\Models\SupervisionTask::where('project_id', $project->id)->count())->toBe(1);
+
     $response = $this->actingAs($user)->delete("/projects/{$project->id}");
     $response->assertRedirect('/projects');
 
@@ -68,6 +84,8 @@ test('deleting a project cascades and wipes all associated child records', funct
     $this->assertDatabaseMissing('document_chunks', ['id' => $chunk->id]);
     $this->assertDatabaseMissing('claims', ['id' => $claim->id]);
     $this->assertDatabaseMissing('evidence_assessments', ['id' => $assessment->id]);
+    $this->assertDatabaseMissing('supervision_notes', ['id' => $supervisionNote->id]);
+    $this->assertDatabaseMissing('supervision_tasks', ['id' => $supervisionTask->id]);
     expect(Chapter::where('project_id', $project->id)->count())->toBe(0);
     expect(\App\Models\Document::where('project_id', $project->id)->count())->toBe(0);
     expect(\App\Models\DocumentPage::where('project_id', $project->id)->count())->toBe(0);
@@ -75,4 +93,6 @@ test('deleting a project cascades and wipes all associated child records', funct
     expect(\App\Models\DocumentChunk::where('project_id', $project->id)->count())->toBe(0);
     expect(\App\Models\Claim::where('project_id', $project->id)->count())->toBe(0);
     expect(\App\Models\EvidenceAssessment::where('project_id', $project->id)->count())->toBe(0);
+    expect(\App\Models\SupervisionNote::where('project_id', $project->id)->count())->toBe(0);
+    expect(\App\Models\SupervisionTask::where('project_id', $project->id)->count())->toBe(0);
 });
