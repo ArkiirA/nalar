@@ -109,6 +109,16 @@ class Project extends Model
         return $this->hasMany(Reference::class)->latest();
     }
 
+    public function claims(): HasMany
+    {
+        return $this->hasMany(Claim::class)->latest();
+    }
+
+    public function evidenceAssessments(): HasMany
+    {
+        return $this->hasMany(EvidenceAssessment::class)->latest();
+    }
+
     /**
      * Apply a guideline preset to the project and populate default chapters and sections.
      */

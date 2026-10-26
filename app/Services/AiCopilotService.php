@@ -497,13 +497,6 @@ class AiCopilotService
      */
     protected function formatPassages(Collection $candidatePassages): array
     {
-        return $candidatePassages->map(fn (CandidatePassage $p) => [
-            'id' => $p->id,
-            'document_id' => $p->document_id,
-            'document_title' => $p->document_title,
-            'page_number' => $p->page_number,
-            'content' => $p->content,
-            'score' => $p->score,
-        ])->values()->all();
+        return $candidatePassages->map(fn (CandidatePassage $p) => $p->toArray())->values()->all();
     }
 }

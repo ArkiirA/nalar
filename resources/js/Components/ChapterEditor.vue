@@ -8,6 +8,7 @@ import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { FigureCaption } from '@/Components/extensions/FigureCaption.js';
 import { Citation } from '@/Components/extensions/Citation.js';
+import { CheckedClaim } from '@/Components/extensions/CheckedClaim.js';
 import axios from 'axios';
 
 const props = defineProps({
@@ -29,7 +30,17 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['saved', 'status-change', 'open-revisions', 'save-version', 'select-citation', 'selection-change', 'request-proposal']);
+const emit = defineEmits([
+    'saved',
+    'status-change',
+    'open-revisions',
+    'save-version',
+    'select-citation',
+    'selection-change',
+    'request-proposal',
+    'check-evidence',
+    'select-claim',
+]);
 
 // Editor state
 const editor = ref(null);
@@ -309,6 +320,7 @@ onMounted(() => {
             TableCell,
             FigureCaption,
             Citation,
+            CheckedClaim,
         ],
         editorProps: {
             handleKeyDown: (view, event) => {
@@ -320,6 +332,17 @@ onMounted(() => {
                 return false;
             },
             handleClick: (view, pos, event) => {
+                const claimEl = event.target.closest('[data-type="checked-claim"]');
+                if (claimEl) {
+                    const claimId = claimEl.getAttribute('data-claim-id');
+                    if (claimId) {
+                        emit('select-claim', {
+                            claimId: parseInt(claimId, 10),
+                        });
+                        return true;
+                    }
+                }
+
                 const citationEl = event.target.closest('[data-type="citation"]');
                 if (citationEl) {
                     const refId = citationEl.getAttribute('data-reference-id');
@@ -428,6 +451,21 @@ const replaceSelection = (newText, range = null) => {
     }
 };
 
+const insertCheckedClaim = (claimAttrs, range = null) => {
+    if (!editor.value) return;
+
+    if (range && typeof range.from === 'number' && typeof range.to === 'number') {
+        editor.value
+            .chain()
+            .focus()
+            .setTextSelection({ from: range.from, to: range.to })
+            .insertCheckedClaim(claimAttrs)
+            .run();
+    } else {
+        editor.value.chain().focus().insertCheckedClaim(claimAttrs).run();
+    }
+};
+
 const getSelectedText = () => selectedText.value;
 const getSelectionRange = () => selectionRange.value;
 
@@ -437,6 +475,7 @@ defineExpose({
     saveContent,
     setContent,
     replaceSelection,
+    insertCheckedClaim,
     getSelectedText,
     getSelectionRange,
 });
@@ -704,11 +743,24 @@ const redo = () => editor.value?.chain().focus().redo().run();
                         <button
                             type="button"
                             title="Minta Usulan Revisi Teks AI"
-                            class="px-2 py-1 rounded transition border border-indigo-200 text-indigo-700 bg-indigo-50/60 hover:bg-indigo-100 inline-flex items-center space-x-1 font-medium"
+                            :disabled="!selectedText"
+                            class="px-2 py-1 rounded transition border border-indigo-200 text-indigo-700 bg-indigo-50/60 hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center space-x-1 font-medium"
                             @click="emit('request-proposal', { text: selectedText, range: selectionRange })"
                         >
                             <span class="text-xs">✨</span>
                             <span>Usulan AI</span>
+                        </button>
+
+                        <!-- Citation Evidence Checker Button -->
+                        <button
+                            type="button"
+                            title="Periksa Bukti Ilmiah terhadap Research Library"
+                            :disabled="!selectedText"
+                            class="px-2 py-1 rounded transition border border-emerald-200 text-emerald-700 bg-emerald-50/60 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center space-x-1 font-medium"
+                            @click="emit('check-evidence', { text: selectedText, range: selectionRange })"
+                        >
+                            <span class="text-xs">🔍</span>
+                            <span>Cek Bukti</span>
                         </button>
                     </div>
                 </div>

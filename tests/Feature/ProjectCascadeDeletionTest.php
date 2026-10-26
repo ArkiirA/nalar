@@ -42,6 +42,20 @@ test('deleting a project cascades and wipes all associated child records', funct
     ]);
     expect(\App\Models\DocumentChunk::where('project_id', $project->id)->count())->toBe(1);
 
+    $claim = \App\Models\Claim::create([
+        'project_id' => $project->id,
+        'claim_text' => 'Klaim uji cascade',
+    ]);
+    $assessment = \App\Models\EvidenceAssessment::create([
+        'claim_id' => $claim->id,
+        'project_id' => $project->id,
+        'status' => 'Supported',
+        'explanation' => 'Uji cascade',
+        'candidate_passages' => [],
+    ]);
+    expect(\App\Models\Claim::where('project_id', $project->id)->count())->toBe(1);
+    expect(\App\Models\EvidenceAssessment::where('project_id', $project->id)->count())->toBe(1);
+
     $response = $this->actingAs($user)->delete("/projects/{$project->id}");
     $response->assertRedirect('/projects');
 
@@ -52,9 +66,13 @@ test('deleting a project cascades and wipes all associated child records', funct
     $this->assertDatabaseMissing('document_pages', ['id' => $page->id]);
     $this->assertDatabaseMissing('references', ['id' => $ref->id]);
     $this->assertDatabaseMissing('document_chunks', ['id' => $chunk->id]);
+    $this->assertDatabaseMissing('claims', ['id' => $claim->id]);
+    $this->assertDatabaseMissing('evidence_assessments', ['id' => $assessment->id]);
     expect(Chapter::where('project_id', $project->id)->count())->toBe(0);
     expect(\App\Models\Document::where('project_id', $project->id)->count())->toBe(0);
     expect(\App\Models\DocumentPage::where('project_id', $project->id)->count())->toBe(0);
     expect(\App\Models\Reference::where('project_id', $project->id)->count())->toBe(0);
     expect(\App\Models\DocumentChunk::where('project_id', $project->id)->count())->toBe(0);
+    expect(\App\Models\Claim::where('project_id', $project->id)->count())->toBe(0);
+    expect(\App\Models\EvidenceAssessment::where('project_id', $project->id)->count())->toBe(0);
 });

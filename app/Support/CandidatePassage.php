@@ -30,4 +30,21 @@ class CandidatePassage
             score: $score,
         );
     }
+
+    /**
+     * Convert CandidatePassage to array.
+     *
+     * @return array{id: int, document_id: int, document_title: string, page_number: int, content: string, score: float}
+     */
+    public function toArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'document_id' => $this->document_id,
+            'document_title' => $this->document_title,
+            'page_number' => $this->page_number,
+            'content' => $this->content,
+            'score' => $this->score,
+        ];
+    }
 }

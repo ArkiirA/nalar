@@ -9,6 +9,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import ProposalDiffDrawer from '@/Components/ProposalDiffDrawer.vue';
+import EvidenceAssessmentDrawer from '@/Components/EvidenceAssessmentDrawer.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import axios from 'axios';
@@ -54,6 +55,98 @@ const activeSelection = ref({ text: '', range: null });
 const proposalDiff = ref(null);
 const isProposalDiffOpen = ref(false);
 const isProposalLoading = ref(false);
+
+// Citation Evidence Checker state
+const isEvidenceDrawerOpen = ref(false);
+const isEvidenceLoading = ref(false);
+const activeAssessment = ref(null);
+const evidenceError = ref(null);
+
+const handleCheckEvidence = async ({ text, range }) => {
+    activeSelection.value = { text: text || '', range };
+    const claimToCheck = text || editorRef.value?.getSelectedText?.() || '';
+
+    if (!claimToCheck.trim()) {
+        alert('Silakan sorot klaim atau kalimat faktual di editor terlebih dahulu.');
+        return;
+    }
+
+    if (!projectAiConsent.value) {
+        isConsentModalOpen.value = true;
+        return;
+    }
+
+    isEvidenceLoading.value = true;
+    isEvidenceDrawerOpen.value = true;
+    evidenceError.value = null;
+    activeAssessment.value = {
+        claim_text: claimToCheck,
+        status: 'Unable to Assess',
+        explanation: 'Sedang memeriksa bukti dari Research Library...',
+        candidate_passages: [],
+    };
+
+    try {
+        const response = await axios.post(route('projects.evidence.check', props.project.id), {
+            claim_text: claimToCheck,
+        });
+
+        activeAssessment.value = {
+            ...response.data,
+            claim_text: claimToCheck,
+        };
+
+        // Mark inline in editor
+        if (editorRef.value?.insertCheckedClaim) {
+            editorRef.value.insertCheckedClaim(
+                {
+                    claim_id: response.data.claim_id,
+                    status: response.data.status,
+                    claim_text: claimToCheck,
+                },
+                activeSelection.value.range
+            );
+        }
+
+        activeSelection.value = { text: '', range: null };
+    } catch (err) {
+        console.error('Failed to check evidence:', err);
+        evidenceError.value = err.response?.data?.message || 'Gagal memverifikasi bukti untuk klaim ini.';
+        activeAssessment.value = {
+            claim_text: claimToCheck,
+            status: 'Unable to Assess',
+            explanation: evidenceError.value,
+            candidate_passages: [],
+        };
+    } finally {
+        isEvidenceLoading.value = false;
+    }
+};
+
+const handleSelectClaim = async ({ claimId }) => {
+    if (!claimId) return;
+
+    isEvidenceLoading.value = true;
+    isEvidenceDrawerOpen.value = true;
+    evidenceError.value = null;
+
+    try {
+        const response = await axios.get(route('projects.evidence.show', [props.project.id, claimId]));
+        activeAssessment.value = response.data;
+    } catch (err) {
+        console.error('Failed to load evidence assessment:', err);
+        evidenceError.value = err.response?.data?.message || 'Gagal memuat detail verifikasi bukti.';
+        activeAssessment.value = {
+            claim_id: claimId,
+            claim_text: 'Klaim terpilih',
+            status: 'Unable to Assess',
+            explanation: evidenceError.value,
+            candidate_passages: [],
+        };
+    } finally {
+        isEvidenceLoading.value = false;
+    }
+};
 
 watch(
     () => props.project.ai_consent,
@@ -1270,6 +1363,8 @@ const deleteReference = (refItem) => {
                         @select-citation="handleSelectCitation"
                         @selection-change="handleSelectionChange"
                         @request-proposal="handleRequestProposal"
+                        @check-evidence="handleCheckEvidence"
+                        @select-claim="handleSelectClaim"
                     />
                 </div>
 
@@ -2099,17 +2194,84 @@ const deleteReference = (refItem) => {
 
                     <!-- Tab: Evidence Checker -->
                     <div v-else-if="activeTab === 'evidence'" class="space-y-4">
-                        <div class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500">
-                            <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3">
-                                &#10004;
+                        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-xs space-y-3">
+                            <div class="flex items-center space-x-2">
+                                <span class="flex h-7 w-7 items-center justify-center rounded bg-emerald-100 text-emerald-700 font-bold text-xs">
+                                    🔍
+                                </span>
+                                <div>
+                                    <h4 class="font-bold text-gray-900 text-xs">Citation Evidence Checker</h4>
+                                    <p class="text-[11px] text-gray-500">Evaluasi klaim terhadap candidate passages dari Research Library.</p>
+                                </div>
                             </div>
-                            <h4 class="font-semibold text-gray-900 mb-1">Citation Evidence Checker</h4>
-                            <p class="text-xs text-gray-500 mb-4">
-                                Sorot kalimat atau klaim argumen dalam editor untuk memverifikasi keabsahannya terhadap paper riset terunggah.
+
+                            <p class="text-xs text-gray-600 leading-relaxed">
+                                Sorot kalimat atau klaim faktual di naskah bab Anda, lalu klik tombol di bawah untuk memeriksa apakah literatur Anda benar-benar mendukung atau membantah pernyataan tersebut.
                             </p>
-                            <span class="inline-block rounded-full bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
-                                Segera hadir
-                            </span>
+
+                            <button
+                                type="button"
+                                :disabled="!activeSelection.text || isEvidenceLoading"
+                                class="w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center justify-center space-x-2"
+                                @click="handleCheckEvidence(activeSelection)"
+                            >
+                                <span v-if="isEvidenceLoading" class="animate-spin text-sm">⏳</span>
+                                <span v-else>🔍</span>
+                                <span>{{ isEvidenceLoading ? 'Memeriksa Bukti...' : (activeSelection.text ? 'Periksa Teks Terpilih' : 'Sorot Teks untuk Cek Bukti') }}</span>
+                            </button>
+                        </div>
+
+                        <!-- 4 Deterministic Categorization Guide -->
+                        <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+                            <h5 class="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                4 Kategori Evaluasi Bukti
+                            </h5>
+                            <div class="space-y-2 text-xs">
+                                <div class="flex items-start space-x-2">
+                                    <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 shrink-0">Supported</span>
+                                    <span class="text-gray-600 text-[11px]">Klaim didukung bukti pada dokumen perpustakaan.</span>
+                                </div>
+                                <div class="flex items-start space-x-2">
+                                    <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 shrink-0">Contradicted</span>
+                                    <span class="text-gray-600 text-[11px]">Klaim bertolak belakang dengan temuan dokumen.</span>
+                                </div>
+                                <div class="flex items-start space-x-2">
+                                    <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 shrink-0">Insufficient Evidence</span>
+                                    <span class="text-gray-600 text-[11px]">Tidak ada dokumen pendukung di perpustakaan.</span>
+                                </div>
+                                <div class="flex items-start space-x-2">
+                                    <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-800 shrink-0">Unable to Assess</span>
+                                    <span class="text-gray-600 text-[11px]">Konteks klaim ambigu atau di luar cakupan dokumen.</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Active Assessment Preview if exists -->
+                        <div v-if="activeAssessment" class="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Hasil Terakhir</span>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold" :class="{
+                                    'bg-emerald-100 text-emerald-800': activeAssessment.status === 'Supported',
+                                    'bg-rose-100 text-rose-800': activeAssessment.status === 'Contradicted',
+                                    'bg-amber-100 text-amber-800': activeAssessment.status === 'Insufficient Evidence',
+                                    'bg-slate-200 text-slate-800': activeAssessment.status === 'Unable to Assess',
+                                }">
+                                    {{ activeAssessment.status }}
+                                </span>
+                            </div>
+                            <blockquote class="text-xs italic text-gray-700 border-l-2 border-emerald-500 pl-2">
+                                "{{ activeAssessment.claim_text }}"
+                            </blockquote>
+                            <p class="text-xs text-gray-600">
+                                {{ activeAssessment.explanation }}
+                            </p>
+                            <button
+                                type="button"
+                                class="text-xs font-semibold text-emerald-700 hover:text-emerald-900 underline block"
+                                @click="isEvidenceDrawerOpen = true"
+                            >
+                                Buka Rincian Drawer & Bukti Halaman &rarr;
+                            </button>
                         </div>
                     </div>
 
@@ -2850,6 +3012,14 @@ const deleteReference = (refItem) => {
             @accept="handleAcceptProposal"
             @reject="handleRejectProposal"
             @close="handleRejectProposal"
+        />
+
+        <!-- Citation Evidence Assessment Drawer -->
+        <EvidenceAssessmentDrawer
+            :isOpen="isEvidenceDrawerOpen"
+            :assessment="activeAssessment"
+            :loading="isEvidenceLoading"
+            @close="isEvidenceDrawerOpen = false"
         />
     </AuthenticatedLayout>
 </template>
